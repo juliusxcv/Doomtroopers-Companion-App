@@ -2,6 +2,9 @@ import { useMutation, useQuery } from 'convex/react'
 import { useState } from 'react'
 import { api } from '../convex/_generated/api'
 import type { Id } from '../convex/_generated/dataModel'
+import { Codex } from './components/Codex'
+import { LootBoard } from './components/LootBoard'
+import { ScanMinigame } from './components/ScanMinigame'
 
 type Identity = { sessionId: Id<'sessions'>; playerId: Id<'players'> }
 
@@ -246,9 +249,61 @@ function SessionView({ identity, onLeave }: { identity: Identity; onLeave: () =>
         </ul>
       </div>
 
+      <SessionTabs sessionId={identity.sessionId} playerId={identity.playerId} isGM={me?.role === 'gm'} />
+
       <button onClick={onLeave} className="w-full text-center text-sm text-neutral-500 underline dark:text-neutral-400">
         Leave session
       </button>
+    </div>
+  )
+}
+
+function SessionTabs({
+  sessionId,
+  playerId,
+  isGM,
+}: {
+  sessionId: Id<'sessions'>
+  playerId: Id<'players'>
+  isGM: boolean
+}) {
+  const [tab, setTab] = useState<'loot' | 'codex'>('loot')
+
+  return (
+    <div className="space-y-4">
+      <div className="flex rounded-lg border border-neutral-200 p-1 dark:border-neutral-800">
+        <button
+          type="button"
+          onClick={() => setTab('loot')}
+          className={`flex-1 rounded-md py-2 text-sm font-medium transition ${
+            tab === 'loot'
+              ? 'bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900'
+              : 'text-neutral-500 dark:text-neutral-400'
+          }`}
+        >
+          Loot
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab('codex')}
+          className={`flex-1 rounded-md py-2 text-sm font-medium transition ${
+            tab === 'codex'
+              ? 'bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900'
+              : 'text-neutral-500 dark:text-neutral-400'
+          }`}
+        >
+          Codex
+        </button>
+      </div>
+
+      {tab === 'loot' ? (
+        <>
+          <ScanMinigame sessionId={sessionId} />
+          <LootBoard sessionId={sessionId} playerId={playerId} />
+        </>
+      ) : (
+        <Codex isGM={isGM} />
+      )}
     </div>
   )
 }
