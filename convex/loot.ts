@@ -28,10 +28,11 @@ export const listForSession = query({
       .collect();
 
     return await Promise.all(
-      drops.map(async (drop) => ({
-        ...drop,
-        claimedByName: drop.claimedBy ? (await ctx.db.get(drop.claimedBy))?.name : undefined,
-      })),
+      drops.map(async (drop) => {
+        const claimant = drop.claimedBy ? await ctx.db.get(drop.claimedBy) : null;
+        const character = claimant ? await ctx.db.get(claimant.characterId) : null;
+        return { ...drop, claimedByName: character?.name };
+      }),
     );
   },
 });

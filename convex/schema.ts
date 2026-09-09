@@ -7,12 +7,21 @@ export default defineSchema({
     createdAt: v.number(),
   }).index("by_code", ["code"]),
 
+  // The predefined campaign roster. Role (GM vs player) is derived from
+  // isGM here, not stored per-session — one source of truth per character.
+  characters: defineTable({
+    name: v.string(),
+    playerRealName: v.optional(v.string()),
+    isGM: v.boolean(),
+  }),
+
   players: defineTable({
     sessionId: v.id("sessions"),
-    name: v.string(),
-    role: v.union(v.literal("gm"), v.literal("player")),
+    characterId: v.id("characters"),
     joinedAt: v.number(),
-  }).index("by_session", ["sessionId"]),
+  })
+    .index("by_session", ["sessionId"])
+    .index("by_session_and_character", ["sessionId", "characterId"]),
 
   // Seeded manually for Phase 1. Will eventually sync from a single
   // centralized "Loot Tables" note in the vault (Monster | Item | Weight),

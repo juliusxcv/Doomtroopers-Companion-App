@@ -100,19 +100,52 @@ function Lobby({ onJoined }: { onJoined: (identity: Identity) => void }) {
   )
 }
 
+function CharacterSelect({
+  value,
+  onChange,
+}: {
+  value: Id<'characters'> | ''
+  onChange: (id: Id<'characters'>) => void
+}) {
+  const characters = useQuery(api.characters.list)
+  const sorted = characters ? [...characters].sort((a, b) => a.name.localeCompare(b.name)) : []
+
+  return (
+    <label className="block text-sm font-medium">
+      Your character
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value as Id<'characters'>)}
+        disabled={!characters}
+        className="mt-1 w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-900"
+      >
+        <option value="" disabled>
+          {characters ? 'Select your character' : 'Loading…'}
+        </option>
+        {sorted.map((c) => (
+          <option key={c._id} value={c._id}>
+            {c.name}
+            {c.playerRealName ? ` (${c.playerRealName})` : ''}
+          </option>
+        ))}
+      </select>
+    </label>
+  )
+}
+
 function CreateSessionForm({ onJoined }: { onJoined: (identity: Identity) => void }) {
-  const [name, setName] = useState('')
+  const [characterId, setCharacterId] = useState<Id<'characters'> | ''>('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const create = useMutation(api.sessions.create)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!name.trim()) return
+    if (!characterId) return
     setBusy(true)
     setError(null)
     try {
-      const { sessionId, playerId } = await create({ gmName: name.trim() })
+      const { sessionId, playerId } = await create({ characterId })
       onJoined({ sessionId, playerId })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong.')
@@ -123,19 +156,11 @@ function CreateSessionForm({ onJoined }: { onJoined: (identity: Identity) => voi
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
-      <label className="block text-sm font-medium">
-        Your name (GM)
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Julius"
-          className="mt-1 w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-900"
-        />
-      </label>
+      <CharacterSelect value={characterId} onChange={setCharacterId} />
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
       <button
         type="submit"
-        disabled={busy || !name.trim()}
+        disabled={busy || !characterId}
         className="w-full rounded-md bg-neutral-900 py-2 text-sm font-medium text-white transition disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
       >
         {busy ? 'Creating…' : 'Create Session'}
@@ -146,18 +171,18 @@ function CreateSessionForm({ onJoined }: { onJoined: (identity: Identity) => voi
 
 function JoinSessionForm({ onJoined }: { onJoined: (identity: Identity) => void }) {
   const [code, setCode] = useState('')
-  const [name, setName] = useState('')
+  const [characterId, setCharacterId] = useState<Id<'characters'> | ''>('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const join = useMutation(api.sessions.join)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!code.trim() || !name.trim()) return
+    if (!code.trim() || !characterId) return
     setBusy(true)
     setError(null)
     try {
-      const { sessionId, playerId } = await join({ code: code.trim(), name: name.trim() })
+      const { sessionId, playerId } = await join({ code: code.trim(), characterId })
       onJoined({ sessionId, playerId })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong.')
@@ -177,19 +202,11 @@ function JoinSessionForm({ onJoined }: { onJoined: (identity: Identity) => void 
           className="mt-1 w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm uppercase tracking-widest outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-900"
         />
       </label>
-      <label className="block text-sm font-medium">
-        Your name
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Ada"
-          className="mt-1 w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-900"
-        />
-      </label>
+      <CharacterSelect value={characterId} onChange={setCharacterId} />
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
       <button
         type="submit"
-        disabled={busy || !code.trim() || !name.trim()}
+        disabled={busy || !code.trim() || !characterId}
         className="w-full rounded-md bg-neutral-900 py-2 text-sm font-medium text-white transition disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
       >
         {busy ? 'Joining…' : 'Join Session'}
@@ -222,7 +239,7 @@ function SessionView({ identity, onLeave }: { identity: Identity; onLeave: () =>
       <div className="text-center">
         <p className="text-sm text-neutral-500 dark:text-neutral-400">Session code</p>
         <p className="font-mono text-4xl font-semibold tracking-[0.3em]">{data.session.code}</p>
-        {me?.role === 'gm' && (
+        {me?.isGM && (
           <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
             Share this code with your players
           </p>
@@ -237,9 +254,9 @@ function SessionView({ identity, onLeave }: { identity: Identity; onLeave: () =>
           {data.players.map((p) => (
             <li key={p._id} className="flex items-center justify-between px-3 py-2 text-sm">
               <span>
-                {p.name} {p._id === identity.playerId && <span className="text-neutral-400">(you)</span>}
+                {p.characterName} {p._id === identity.playerId && <span className="text-neutral-400">(you)</span>}
               </span>
-              {p.role === 'gm' && (
+              {p.isGM && (
                 <span className="rounded-full bg-neutral-900 px-2 py-0.5 text-xs text-white dark:bg-neutral-100 dark:text-neutral-900">
                   GM
                 </span>
@@ -249,7 +266,7 @@ function SessionView({ identity, onLeave }: { identity: Identity; onLeave: () =>
         </ul>
       </div>
 
-      <SessionTabs sessionId={identity.sessionId} playerId={identity.playerId} isGM={me?.role === 'gm'} />
+      <SessionTabs sessionId={identity.sessionId} playerId={identity.playerId} isGM={me?.isGM ?? false} />
 
       <button onClick={onLeave} className="w-full text-center text-sm text-neutral-500 underline dark:text-neutral-400">
         Leave session
