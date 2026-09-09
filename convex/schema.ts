@@ -48,5 +48,7 @@ export default defineSchema({
     body: v.string(),
     unlocked: v.boolean(),
     syncedAt: v.number(),
-  }).index("by_slug", ["slug"]),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_code", ["code"]),
 });

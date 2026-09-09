@@ -41,10 +41,57 @@ export function Codex({ isGM }: { isGM: boolean }) {
   return (
     <div className="space-y-2">
       <h2 className="text-sm font-medium text-neutral-500 dark:text-neutral-400">Codex</h2>
+      <CodeRedeemer />
       <div className="rounded-lg border border-neutral-200 p-2 dark:border-neutral-800">
         <TreeView node={tree} depth={0} isGM={isGM} />
       </div>
     </div>
+  )
+}
+
+function CodeRedeemer() {
+  const redeemCode = useMutation(api.codex.redeemCode)
+  const [code, setCode] = useState('')
+  const [message, setMessage] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!code.trim()) return
+    setBusy(true)
+    try {
+      const result = await redeemCode({ code: code.trim() })
+      if (result.status === 'unlocked') setMessage(`Unlocked: ${result.title}`)
+      else if (result.status === 'already-unlocked') setMessage(`Already unlocked: ${result.title}`)
+      else setMessage('No matching code.')
+      setCode('')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-1">
+      <div className="flex gap-2">
+        <input
+          value={code}
+          onChange={(e) => {
+            setCode(e.target.value.toUpperCase())
+            setMessage(null)
+          }}
+          placeholder="Enter access code"
+          className="min-w-0 flex-1 rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm uppercase tracking-widest outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-900"
+        />
+        <button
+          type="submit"
+          disabled={busy || !code.trim()}
+          className="shrink-0 rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white transition disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+        >
+          Redeem
+        </button>
+      </div>
+      {message && <p className="text-xs text-neutral-500 dark:text-neutral-400">{message}</p>}
+    </form>
   )
 }
 

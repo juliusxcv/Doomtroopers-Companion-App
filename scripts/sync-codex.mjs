@@ -74,7 +74,7 @@ for (const file of files) {
     categoryPath,
     type: fm.type,
     status: fm.status,
-    code: fm.code !== undefined ? String(fm.code) : undefined,
+    code: fm.code !== undefined ? String(fm.code).trim().toUpperCase() : undefined,
     cost: fm.cost !== undefined ? Number(fm.cost) : undefined,
     lvl: fm.lvl !== undefined ? String(fm.lvl) : undefined,
     body,

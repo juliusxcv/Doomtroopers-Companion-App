@@ -68,3 +68,23 @@ export const setUnlocked = mutation({
     await ctx.db.patch(entryId, { unlocked });
   },
 });
+
+// Players type in a code they found in-fiction (e.g. a Security handout's
+// access code); if it matches a note's `code` frontmatter, that entry
+// unlocks for the whole session. Codes are compared case-insensitively.
+export const redeemCode = mutation({
+  args: { code: v.string() },
+  handler: async (ctx, { code }) => {
+    const normalized = code.trim().toUpperCase();
+    const entry = await ctx.db
+      .query("codex_entries")
+      .withIndex("by_code", (q) => q.eq("code", normalized))
+      .unique();
+
+    if (!entry) return { status: "invalid" as const };
+    if (entry.unlocked) return { status: "already-unlocked" as const, title: entry.title };
+
+    await ctx.db.patch(entry._id, { unlocked: true });
+    return { status: "unlocked" as const, title: entry.title };
+  },
+});
