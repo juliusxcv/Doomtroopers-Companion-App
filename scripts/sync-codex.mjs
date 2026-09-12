@@ -125,6 +125,19 @@ if (!convexUrl) {
 const client = new ConvexHttpClient(convexUrl);
 const result = await client.mutation(api.codex.sync, { entries });
 
+// This note's own tier count is the one authoritative source for how many
+// LVL sections a creature has (see convex/monsters.ts setTierCount) — push
+// it onto the linked monster so the Autopsy screen's progress bar agrees
+// with what the Codex actually gates.
+for (const entry of entries) {
+  if (entry.tiers && entry.monsterId) {
+    await client.mutation(api.monsters.setTierCount, {
+      monsterId: entry.monsterId,
+      tierCount: entry.tiers.length,
+    });
+  }
+}
+
 console.log(`Synced ${entries.length} entries (${result.created} new, ${result.updated} updated).`);
 
 if (result.stale.length > 0) {

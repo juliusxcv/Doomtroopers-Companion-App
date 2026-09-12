@@ -65,11 +65,6 @@ function parseLootTable(body) {
   return items;
 }
 
-function countLvlSections(body) {
-  const matches = body.match(/^##\s*LVL\s*\d+\s*Autopsy:/gim);
-  return matches ? matches.length : 0;
-}
-
 // Historical item name -> rarity, by majority vote across the old loot_log backup.
 function buildRarityMap(backupDir) {
   const lootLogPath = path.join(backupDir, "tables", "loot_log.json");
@@ -133,7 +128,6 @@ for (const file of files) {
     organPool,
     attemptsModifier: Number(fm.attempts_modifier ?? 0),
     identifiedScansRequired: Number(fm.identified ?? 0),
-    tierCount: countLvlSections(content),
     lootTable,
   });
 }

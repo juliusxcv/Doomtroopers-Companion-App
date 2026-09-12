@@ -9,7 +9,9 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "sync:codex": "node scripts/sync-codex.mjs",
-    "migrate:inventory": "node scripts/migrate-inventory.mjs"
+    "sync:monsters": "node scripts/sync-monsters.mjs",
+    "migrate:inventory": "node scripts/migrate-inventory.mjs",
+    "migrate:scan-progress": "node scripts/migrate-scan-progress.mjs"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
