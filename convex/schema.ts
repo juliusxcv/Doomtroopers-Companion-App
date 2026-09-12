@@ -46,10 +46,13 @@ export default defineSchema({
   // backed up) — item rarities here were reconstructed from the old
   // loot_log backup's historical drops instead.
   //
-  // `stats`/`weapons`/`abilities` power the Monster Stat Card feature — a
-  // combat quick-reference, separate from the Autopsy Report's lore tiers.
-  // All optional: a creature note with no "## Stats"/"## Weapons"/
-  // "## Abilities" sections simply has no card content yet.
+  // `loadouts`/`abilities` power the Monster Stat Card feature — a combat
+  // quick-reference, separate from the Autopsy Report's lore tiers. Most
+  // creatures have exactly one loadout (an empty `name`); a squad-type
+  // creature like Undead Mutant carries several named ones (Sergeant,
+  // Grenadier, ...), each with its own stats/weapons — abilities are shared
+  // across all of a creature's loadouts. Both optional: a creature note with
+  // no "### Stats"/"### Abilities" sections simply has no card content yet.
   monsters: defineTable({
     monsterId: v.string(),
     code: v.string(),
@@ -61,21 +64,21 @@ export default defineSchema({
     tierCount: v.number(),
     lootTable: v.array(v.object({ item: v.string(), rarity: RARITY })),
     scanCount: v.number(),
-    stats: v.optional(
-      v.object({
-        rc: v.string(),
-        cc: v.string(),
-        ap: v.string(),
-        mv: v.string(),
-        def: v.string(),
-        hp: v.string(),
-      }),
-    ),
-    weapons: v.optional(
-      v.object({
-        ranged: v.array(WEAPON),
-        melee: v.array(WEAPON),
-      }),
+    loadouts: v.optional(
+      v.array(
+        v.object({
+          name: v.string(),
+          stats: v.object({
+            rc: v.string(),
+            cc: v.string(),
+            ap: v.string(),
+            mv: v.string(),
+            def: v.string(),
+            hp: v.string(),
+          }),
+          weapons: v.object({ ranged: v.array(WEAPON), melee: v.array(WEAPON) }),
+        }),
+      ),
     ),
     abilities: v.optional(v.array(v.object({ name: v.string(), description: v.string() }))),
   }).index("by_monster_id", ["monsterId"]),

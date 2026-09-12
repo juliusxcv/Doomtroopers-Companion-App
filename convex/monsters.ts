@@ -12,17 +12,22 @@ const monsterContentFields = {
   identifiedScansRequired: v.number(),
   lootTable: v.array(v.object({ item: v.string(), rarity: RARITY })),
   tierCount: v.number(),
-  stats: v.optional(
-    v.object({
-      rc: v.string(),
-      cc: v.string(),
-      ap: v.string(),
-      mv: v.string(),
-      def: v.string(),
-      hp: v.string(),
-    }),
+  loadouts: v.optional(
+    v.array(
+      v.object({
+        name: v.string(),
+        stats: v.object({
+          rc: v.string(),
+          cc: v.string(),
+          ap: v.string(),
+          mv: v.string(),
+          def: v.string(),
+          hp: v.string(),
+        }),
+        weapons: v.object({ ranged: v.array(WEAPON), melee: v.array(WEAPON) }),
+      }),
+    ),
   ),
-  weapons: v.optional(v.object({ ranged: v.array(WEAPON), melee: v.array(WEAPON) })),
   abilities: v.optional(v.array(v.object({ name: v.string(), description: v.string() }))),
 };
 
