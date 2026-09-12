@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import type { Doc } from "./_generated/dataModel";
 import { RARITY, WEAPON } from "./schema";
 import { mutation, query } from "./_generated/server";
 
@@ -85,10 +86,20 @@ export const importScanProgress = mutation({
   },
 });
 
+function isIdentified(m: Doc<"monsters">): boolean {
+  return m.identifiedScansRequired > 0 && m.scanCount >= m.identifiedScansRequired;
+}
+
+// Stat Card content (loadouts/abilities) is gated behind the same
+// threshold as LVL 1 Autopsy — i.e. identification — for both GM and
+// players, same "no manual override" rule as the Codex's scan-gated tiers
+// (see convex/codex.ts). A locked creature's real stats never reach the
+// client, not just hidden client-side.
 export const listAll = query({
   args: {},
   handler: async (ctx) => {
-    return await ctx.db.query("monsters").collect();
+    const monsters = await ctx.db.query("monsters").collect();
+    return monsters.map((m) => (isIdentified(m) ? m : { ...m, loadouts: undefined, abilities: undefined }));
   },
 });
 

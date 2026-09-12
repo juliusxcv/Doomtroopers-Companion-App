@@ -7,9 +7,11 @@ type Monster = Doc<'monsters'>
 type Weapon = { name: string; atk: string; dmg: string; wr: string }
 type Loadout = NonNullable<Monster['loadouts']>[number]
 
-// Name stays gated behind identification, matching the Autopsy/Codex
-// convention — but stats/weapons/abilities are shown regardless, since
-// players need combat info before they've had a chance to dissect anything.
+// Name and stat-card content (loadouts/abilities) are both gated behind
+// identification — the same LVL 1 Autopsy threshold — for both GM and
+// players. The server (convex/monsters.ts) already strips loadouts/
+// abilities when this is false, so this is just for deciding what message
+// to show, not an access check.
 function isIdentified(m: Monster): boolean {
   return m.identifiedScansRequired > 0 && m.scanCount >= m.identifiedScansRequired
 }
@@ -67,7 +69,8 @@ function BestiaryList({ monsters, onSelect }: { monsters: Monster[]; onSelect: (
 const STAT_KEYS = ['rc', 'cc', 'ap', 'mv', 'def', 'hp'] as const
 
 function StatCard({ monster, onExit }: { monster: Monster; onExit: () => void }) {
-  const displayName = isIdentified(monster) ? monster.name : monster.code
+  const identified = isIdentified(monster)
+  const displayName = identified ? monster.name : monster.code
   const loadouts = monster.loadouts ?? []
   const hasAbilities = monster.abilities && monster.abilities.length > 0
   const hasCard = loadouts.length > 0 || hasAbilities
@@ -81,45 +84,53 @@ function StatCard({ monster, onExit }: { monster: Monster; onExit: () => void })
 
       {monster.blurb && <p className="text-center font-body text-sm text-bone-dim italic">"{monster.blurb}"</p>}
 
-      {/* A single unnamed loadout (the common case) renders flat; a
-          squad-type creature with several named loadouts (e.g. Undead
-          Mutant's Sergeant/Grenadier/Trooper/...) gets a collapsible
-          section per loadout instead, first one open by default. */}
-      {loadouts.length === 1 && !loadouts[0].name ? (
-        <div className="panel p-3">
-          <LoadoutBody loadout={loadouts[0]} />
-        </div>
-      ) : (
-        loadouts.map((l, i) => (
-          <details key={i} className="panel p-3" open={i === 0}>
-            <summary className="cursor-pointer font-mono text-[11px] font-medium tracking-widest text-phosphor-dim uppercase">
-              {l.name || `Loadout ${i + 1}`}
-            </summary>
-            <div className="mt-2">
-              <LoadoutBody loadout={l} />
-            </div>
-          </details>
-        ))
-      )}
-
-      {hasAbilities && (
-        <div className="panel space-y-2 p-3">
-          <div className="font-mono text-[11px] tracking-widest text-phosphor-dim uppercase">Abilities</div>
-          <ul className="space-y-1.5">
-            {monster.abilities!.map((a, i) => (
-              <li key={i} className="font-body text-sm text-bone-dim">
-                <span className="font-mono font-semibold text-phosphor">{a.name}</span>
-                {a.description && <span> — {a.description}</span>}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {!hasCard && (
+      {!identified ? (
         <p className="panel py-6 text-center font-mono text-xs tracking-widest text-bone-dim uppercase">
-          ◊ No stat data catalogued ◊
+          ◊ Not yet identified — needs more successful scans ◊
         </p>
+      ) : (
+        <>
+          {/* A single unnamed loadout (the common case) renders flat; a
+              squad-type creature with several named loadouts (e.g. Undead
+              Mutant's Sergeant/Grenadier/Trooper/...) gets a collapsible
+              section per loadout instead, first one open by default. */}
+          {loadouts.length === 1 && !loadouts[0].name ? (
+            <div className="panel p-3">
+              <LoadoutBody loadout={loadouts[0]} />
+            </div>
+          ) : (
+            loadouts.map((l, i) => (
+              <details key={i} className="panel p-3" open={i === 0}>
+                <summary className="cursor-pointer font-mono text-[11px] font-medium tracking-widest text-phosphor-dim uppercase">
+                  {l.name || `Loadout ${i + 1}`}
+                </summary>
+                <div className="mt-2">
+                  <LoadoutBody loadout={l} />
+                </div>
+              </details>
+            ))
+          )}
+
+          {hasAbilities && (
+            <div className="panel space-y-2 p-3">
+              <div className="font-mono text-[11px] tracking-widest text-phosphor-dim uppercase">Abilities</div>
+              <ul className="space-y-1.5">
+                {monster.abilities!.map((a, i) => (
+                  <li key={i} className="font-body text-sm text-bone-dim">
+                    <span className="font-mono font-semibold text-phosphor">{a.name}</span>
+                    {a.description && <span> — {a.description}</span>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {!hasCard && (
+            <p className="panel py-6 text-center font-mono text-xs tracking-widest text-bone-dim uppercase">
+              ◊ No stat data catalogued ◊
+            </p>
+          )}
+        </>
       )}
 
       <button
