@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "sync:codex": "node scripts/sync-codex.mjs"
+    "sync:codex": "node scripts/sync-codex.mjs",
+    "migrate:inventory": "node scripts/migrate-inventory.mjs"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",

@@ -41,6 +41,27 @@ export default defineSchema({
     createdAt: v.number(),
   }).index("by_session", ["sessionId"]),
 
+  // Campaign-wide (not session-scoped) — items persist for a character across
+  // every session. Ported 1:1 from the old app's `loot_log` table; see
+  // project memory project-lovable-app-reference and scripts/migrate-inventory.mjs.
+  // `smelted` marks an item converted to crafting resources; it stays in the
+  // log rather than being deleted, matching the old app's "restore" toggle.
+  inventory: defineTable({
+    characterId: v.id("characters"),
+    itemName: v.string(),
+    rarity: v.union(
+      v.literal("scrap"),
+      v.literal("common"),
+      v.literal("uncommon"),
+      v.literal("rare"),
+      v.literal("legendary"),
+    ),
+    source: v.string(),
+    monsterId: v.optional(v.string()),
+    smelted: v.boolean(),
+    createdAt: v.number(),
+  }).index("by_character", ["characterId"]),
+
   // Synced from the vault's Published/ folder (see sync-codex script).
   // `unlocked` is campaign-wide, not tied to a session join-code, and is
   // deliberately preserved across re-syncs — only content fields get

@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { api } from '../convex/_generated/api'
 import type { Id } from '../convex/_generated/dataModel'
 import { Codex } from './components/Codex'
+import { Inventory } from './components/Inventory'
 import { LootBoard } from './components/LootBoard'
 import { ScanMinigame } from './components/ScanMinigame'
 
@@ -284,43 +285,41 @@ function SessionTabs({
   playerId: Id<'players'>
   isGM: boolean
 }) {
-  const [tab, setTab] = useState<'loot' | 'codex'>('loot')
+  const [tab, setTab] = useState<'loot' | 'inventory' | 'codex'>('loot')
+
+  const tabs = [
+    { key: 'loot', label: 'Loot' },
+    { key: 'inventory', label: 'Inventory' },
+    { key: 'codex', label: 'Codex' },
+  ] as const
 
   return (
     <div className="space-y-4">
       <div className="flex rounded-lg border border-neutral-200 p-1 dark:border-neutral-800">
-        <button
-          type="button"
-          onClick={() => setTab('loot')}
-          className={`flex-1 rounded-md py-2 text-sm font-medium transition ${
-            tab === 'loot'
-              ? 'bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900'
-              : 'text-neutral-500 dark:text-neutral-400'
-          }`}
-        >
-          Loot
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab('codex')}
-          className={`flex-1 rounded-md py-2 text-sm font-medium transition ${
-            tab === 'codex'
-              ? 'bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900'
-              : 'text-neutral-500 dark:text-neutral-400'
-          }`}
-        >
-          Codex
-        </button>
+        {tabs.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setTab(t.key)}
+            className={`flex-1 rounded-md py-2 text-sm font-medium transition ${
+              tab === t.key
+                ? 'bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900'
+                : 'text-neutral-500 dark:text-neutral-400'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
 
-      {tab === 'loot' ? (
+      {tab === 'loot' && (
         <>
           <ScanMinigame sessionId={sessionId} />
           <LootBoard sessionId={sessionId} playerId={playerId} />
         </>
-      ) : (
-        <Codex isGM={isGM} />
       )}
+      {tab === 'inventory' && <Inventory />}
+      {tab === 'codex' && <Codex isGM={isGM} />}
     </div>
   )
 }
