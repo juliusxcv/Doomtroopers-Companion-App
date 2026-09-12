@@ -267,7 +267,7 @@ function SessionShell({ identity, onLeave }: { identity: Identity; onLeave: () =
           <button
             type="button"
             onClick={() => setFeature('menu')}
-            className="font-mono text-xs text-bone-dim underline"
+            className="border border-phosphor-dim px-2 py-1 font-mono text-[10px] font-medium tracking-widest text-bone uppercase hover:border-phosphor"
           >
             ‹ Main Menu
           </button>

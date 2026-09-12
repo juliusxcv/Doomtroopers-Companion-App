@@ -239,14 +239,9 @@ function AutopsySession({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <button type="button" onClick={onExit} className="font-mono text-xs text-bone-dim underline">
-          ‹ Choose another specimen
-        </button>
-        <span className="font-mono text-xs tracking-widest text-phosphor-dim uppercase">
-          {isIdentified(monster) ? monster.name : monster.code}
-        </span>
-      </div>
+      <p className="text-center font-mono text-xs tracking-widest text-phosphor-dim uppercase">
+        {isIdentified(monster) ? monster.name : monster.code}
+      </p>
 
       {monster.blurb && <p className="font-body text-sm text-bone-dim italic">"{monster.blurb}"</p>}
 
@@ -361,27 +356,26 @@ function AutopsySession({
                     (GM specimen — not logged to Inventory)
                   </p>
                 )}
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setSeed((n) => n + 1)}
-                    className="flex-1 border border-phosphor-dim py-2 font-mono text-xs font-medium tracking-widest text-bone uppercase hover:border-phosphor"
-                  >
-                    Scan again
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onExit}
-                    className="flex-1 border border-phosphor bg-phosphor-faint py-2 font-mono text-xs font-medium tracking-widest text-phosphor uppercase hover:bg-phosphor/20"
-                  >
-                    Choose another
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setSeed((n) => n + 1)}
+                  className="w-full border border-phosphor bg-phosphor-faint py-2 font-mono text-xs font-semibold tracking-widest text-phosphor uppercase hover:bg-phosphor/20"
+                >
+                  Scan again
+                </button>
               </>
             )}
           </div>
         )}
       </div>
+
+      <button
+        type="button"
+        onClick={onExit}
+        className="w-full border border-phosphor-dim py-2 font-mono text-xs font-medium tracking-widest text-bone uppercase hover:border-phosphor"
+      >
+        ‹ Choose Another Specimen
+      </button>
     </div>
   )
 }
