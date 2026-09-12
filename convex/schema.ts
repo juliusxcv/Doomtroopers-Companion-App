@@ -41,10 +41,11 @@ export default defineSchema({
   // Synced from the vault's Published/CODEX/Bestiary notes — see
   // scripts/sync-codex.mjs. `scanCount` is preserved across re-syncs just
   // like codex_entries.unlocked, since it's real progression, not authored
-  // content. Drop-chance/tier balance data from the old app's `monster_loot`
-  // table didn't survive (source Supabase project was deleted before it got
-  // backed up) — item rarities here were reconstructed from the old
-  // loot_log backup's historical drops instead.
+  // content. `lootTable[].rarity`/`.dropChance` come from the GM-authored
+  // "Lootdrop Table.md" reference (per monster+item, since the same item
+  // can carry a different rarity/chance depending on which creature drops
+  // it), falling back to a historical-log guess or a flat default for
+  // anything not yet listed there.
   //
   // `loadouts`/`abilities` power the Monster Stat Card feature — a combat
   // quick-reference, separate from the Autopsy Report's lore tiers. Most
@@ -62,7 +63,7 @@ export default defineSchema({
     attemptsModifier: v.number(),
     identifiedScansRequired: v.number(),
     tierCount: v.number(),
-    lootTable: v.array(v.object({ item: v.string(), rarity: RARITY })),
+    lootTable: v.array(v.object({ item: v.string(), rarity: RARITY, dropChance: v.number() })),
     scanCount: v.number(),
     loadouts: v.optional(
       v.array(

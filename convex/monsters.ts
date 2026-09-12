@@ -11,7 +11,7 @@ const monsterContentFields = {
   organPool: v.array(v.string()),
   attemptsModifier: v.number(),
   identifiedScansRequired: v.number(),
-  lootTable: v.array(v.object({ item: v.string(), rarity: RARITY })),
+  lootTable: v.array(v.object({ item: v.string(), rarity: RARITY, dropChance: v.number() })),
   tierCount: v.number(),
   loadouts: v.optional(
     v.array(
@@ -103,7 +103,8 @@ export const listAll = query({
   },
 });
 
-const BASE_DROP_CHANCE = 0.5;
+// Loss-case drops use each item's own chance (see lootTable[].dropChance),
+// scaled way down — a ruined specimen still occasionally yields scraps.
 const FAILURE_DROP_PENALTY = 0.1;
 
 // Attempts allowed before a specimen is ruined. Kept identical on the client
@@ -141,14 +142,17 @@ export const submitResult = mutation({
       await ctx.db.patch(monster._id, { scanCount });
       const mult = 0.4 + cleanliness * 0.6;
       for (const entry of monster.lootTable) {
-        if (Math.random() < BASE_DROP_CHANCE * mult) drops.push(entry);
+        if (Math.random() < (entry.dropChance / 100) * mult) drops.push({ item: entry.item, rarity: entry.rarity });
       }
       if (drops.length === 0 && monster.lootTable.length > 0) {
-        drops.push(monster.lootTable[Math.floor(Math.random() * monster.lootTable.length)]);
+        const entry = monster.lootTable[Math.floor(Math.random() * monster.lootTable.length)];
+        drops.push({ item: entry.item, rarity: entry.rarity });
       }
     } else {
       for (const entry of monster.lootTable) {
-        if (Math.random() < BASE_DROP_CHANCE * FAILURE_DROP_PENALTY) drops.push(entry);
+        if (Math.random() < (entry.dropChance / 100) * FAILURE_DROP_PENALTY) {
+          drops.push({ item: entry.item, rarity: entry.rarity });
+        }
       }
     }
 
