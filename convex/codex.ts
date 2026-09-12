@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import type { Doc } from "./_generated/dataModel";
 import { mutation, query, type QueryCtx } from "./_generated/server";
 
 const entryContentFields = {
@@ -72,21 +73,36 @@ function tierProgress(ctx: QueryCtx, monsterId: string) {
     .unique();
 }
 
-// GM sees every tier's full text, plus how many are actually unlocked (tier
-// unlock is automatic, computed from scan count — not the GM toggle).
+// Tiered (Autopsy Report) entries unlock automatically from scan count —
+// for BOTH GM and players. There's no manual GM override for these (unlike
+// Archive/Mainframe/Security, where the GM toggle is the only unlock path),
+// so GM doesn't get a spoiler view here: what's not yet scanned isn't shown
+// to the GM either, same gating as players get.
+async function resolveTieredEntry(ctx: QueryCtx, e: Doc<"codex_entries">) {
+  const monster = e.monsterId ? await tierProgress(ctx, e.monsterId) : null;
+  const tiers = e.tiers ?? [];
+  const unlockedTierCount = monster
+    ? computeUnlockedTierCount(monster.identifiedScansRequired, monster.scanCount, tiers.length)
+    : 0;
+  return {
+    ...e,
+    tiers: tiers.slice(0, unlockedTierCount),
+    tierCount: tiers.length,
+    unlockedTierCount,
+    scanCount: monster?.scanCount ?? 0,
+    unlocked: unlockedTierCount > 0,
+  };
+}
+
+// GM sees full content for manually-toggled entries regardless of lock
+// state; tiered entries are gated identically to the player view (see
+// resolveTieredEntry).
 export const listForGM = query({
   args: {},
   handler: async (ctx) => {
     const entries = await ctx.db.query("codex_entries").collect();
     return await Promise.all(
-      entries.map(async (e) => {
-        if (!e.tiers || !e.monsterId) return e;
-        const monster = await tierProgress(ctx, e.monsterId);
-        const unlockedTierCount = monster
-          ? computeUnlockedTierCount(monster.identifiedScansRequired, monster.scanCount, e.tiers.length)
-          : 0;
-        return { ...e, tierCount: e.tiers.length, unlockedTierCount, scanCount: monster?.scanCount ?? 0 };
-      }),
+      entries.map((e) => (e.tiers && e.monsterId ? resolveTieredEntry(ctx, e) : e)),
     );
   },
 });
@@ -101,19 +117,7 @@ export const listForPlayers = query({
     const entries = await ctx.db.query("codex_entries").collect();
     return await Promise.all(
       entries.map(async (e) => {
-        if (e.tiers && e.monsterId) {
-          const monster = await tierProgress(ctx, e.monsterId);
-          const unlockedTierCount = monster
-            ? computeUnlockedTierCount(monster.identifiedScansRequired, monster.scanCount, e.tiers.length)
-            : 0;
-          return {
-            ...e,
-            tiers: e.tiers.slice(0, unlockedTierCount),
-            tierCount: e.tiers.length,
-            unlockedTierCount,
-            unlocked: unlockedTierCount > 0,
-          };
-        }
+        if (e.tiers && e.monsterId) return resolveTieredEntry(ctx, e);
         return e.unlocked ? e : { ...e, body: "", code: undefined };
       }),
     );
