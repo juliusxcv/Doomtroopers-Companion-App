@@ -139,7 +139,11 @@ export const redeemCode = mutation({
       .withIndex("by_code", (q) => q.eq("code", normalized))
       .unique();
 
-    if (!entry) return { status: "invalid" as const };
+    // Tiered (Autopsy Report) entries unlock only via scan progress — their
+    // `code` is just the specimen designation shown in the minigame, not a
+    // redeemable access code, so patching `unlocked` here would silently do
+    // nothing (the query recomputes it from scanCount regardless).
+    if (!entry || entry.tiers !== undefined) return { status: "invalid" as const };
     if (entry.unlocked) return { status: "already-unlocked" as const, title: entry.title };
 
     await ctx.db.patch(entry._id, { unlocked: true });

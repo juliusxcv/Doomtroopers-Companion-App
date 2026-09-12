@@ -11,15 +11,14 @@ const monsterContentFields = {
   attemptsModifier: v.number(),
   identifiedScansRequired: v.number(),
   lootTable: v.array(v.object({ item: v.string(), rarity: RARITY })),
+  tierCount: v.number(),
 };
 
-// Called by scripts/sync-monsters.mjs. `scanCount` and `tierCount` are
-// intentionally absent from monsterContentFields:
-// - `scanCount` so a re-sync never resets real progression.
-// - `tierCount` because the private creature note isn't a reliable source
-//   for it (it doesn't always carry the "## LVL N Autopsy:" sections the
-//   *public* Codex note does) — see setTierCount, called from
-//   scripts/sync-codex.mjs instead, which is the one true source.
+// Called by scripts/sync-codex.mjs — the same public Bestiary note that
+// feeds codex_entries also feeds this, in the same pass, so tierCount here
+// is always exactly `tiers.length` from that note. `scanCount` is
+// intentionally absent from monsterContentFields so a re-sync never resets
+// real progression — only new monsters start at 0.
 export const sync = mutation({
   args: { monsters: v.array(v.object(monsterContentFields)) },
   handler: async (ctx, { monsters }) => {
@@ -34,28 +33,11 @@ export const sync = mutation({
         await ctx.db.patch(existing._id, monster);
         updated++;
       } else {
-        await ctx.db.insert("monsters", { ...monster, scanCount: 0, tierCount: 0 });
+        await ctx.db.insert("monsters", { ...monster, scanCount: 0 });
         created++;
       }
     }
     return { created, updated };
-  },
-});
-
-// Called by scripts/sync-codex.mjs after it syncs codex_entries — the
-// public Bestiary autopsy note is the one authoritative source for how many
-// tiers a creature has, since that's literally what gates player-visible
-// content. Silently no-ops if the monster hasn't been synced yet.
-export const setTierCount = mutation({
-  args: { monsterId: v.string(), tierCount: v.number() },
-  handler: async (ctx, { monsterId, tierCount }) => {
-    const monster = await ctx.db
-      .query("monsters")
-      .withIndex("by_monster_id", (q) => q.eq("monsterId", monsterId))
-      .unique();
-    if (monster && monster.tierCount !== tierCount) {
-      await ctx.db.patch(monster._id, { tierCount });
-    }
   },
 });
 
