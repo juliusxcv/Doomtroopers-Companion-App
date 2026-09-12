@@ -2,6 +2,7 @@ import { useMutation, useQuery } from 'convex/react'
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../../convex/_generated/api'
 import type { Doc, Id } from '../../convex/_generated/dataModel'
+import { RARITY_TEXT, type Rarity } from '../lib/rarity'
 
 type Monster = Doc<'monsters'>
 
@@ -102,15 +103,15 @@ function SpecimenSelect({
 }) {
   return (
     <div className="space-y-2">
-      <h2 className="text-sm font-medium text-neutral-500 dark:text-neutral-400">
-        Available specimens
+      <h2 className="font-mono text-[11px] font-medium tracking-widest text-phosphor-dim uppercase">
+        ++ Available Specimens ++
       </h2>
       {monsters.length === 0 ? (
-        <p className="rounded-md border border-dashed border-neutral-300 py-6 text-center text-sm text-neutral-400 dark:border-neutral-700">
-          Slab empty — no specimens synced from the vault yet.
+        <p className="panel py-6 text-center font-mono text-xs tracking-widest text-bone-dim uppercase">
+          ◊ Slab empty ◊
         </p>
       ) : (
-        <ul className="space-y-1">
+        <ul className="space-y-1.5">
           {monsters.map((m) => {
             const displayName = isIdentified(m) ? m.name : m.code
             const showProgress = m.identifiedScansRequired > 0 && m.tierCount > 0
@@ -120,26 +121,24 @@ function SpecimenSelect({
                 <button
                   type="button"
                   onClick={() => onSelect(m.monsterId)}
-                  className="w-full rounded-md border border-neutral-300 px-3 py-2 text-left transition-colors hover:border-neutral-500 dark:border-neutral-700"
+                  className="panel w-full px-3 py-2 text-left transition-colors hover:border-phosphor"
                 >
                   <div className="flex items-baseline gap-2">
-                    <span className="font-mono text-xs text-neutral-400">{m.code}</span>
-                    <span className="font-medium">{displayName}</span>
+                    <span className="font-mono text-xs text-phosphor-dim">{m.code}</span>
+                    <span className="font-display text-glow text-lg text-phosphor">{displayName}</span>
                   </div>
-                  <div className="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
+                  <div className="mt-0.5 font-mono text-[11px] text-bone-dim">
                     {m.organPool.length} organs · {attemptsAllowed(m)} incisions
                     {m.identifiedScansRequired > 0 && (
                       <> · scans {m.scanCount}/{m.identifiedScansRequired}</>
                     )}
                   </div>
                   {showProgress && (
-                    <div className="mt-1 flex gap-0.5">
+                    <div className="mt-1.5 flex gap-0.5">
                       {Array.from({ length: m.tierCount }, (_, i) => (
                         <div
                           key={i}
-                          className={`h-1 flex-1 rounded-full ${
-                            i < unlocked ? 'bg-emerald-500' : 'bg-neutral-300 dark:bg-neutral-700'
-                          }`}
+                          className={`h-1 flex-1 ${i < unlocked ? 'bg-phosphor' : 'bg-phosphor-faint'}`}
                         />
                       ))}
                     </div>
@@ -241,20 +240,22 @@ function AutopsySession({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <button type="button" onClick={onExit} className="text-xs text-neutral-500 underline">
+        <button type="button" onClick={onExit} className="font-mono text-xs text-bone-dim underline">
           ‹ Choose another specimen
         </button>
-        <span className="font-mono text-xs text-neutral-400">
+        <span className="font-mono text-xs tracking-widest text-phosphor-dim uppercase">
           {isIdentified(monster) ? monster.name : monster.code}
         </span>
       </div>
 
-      {monster.blurb && <p className="text-xs italic text-neutral-500 dark:text-neutral-400">{monster.blurb}</p>}
+      {monster.blurb && <p className="font-body text-sm text-bone-dim italic">"{monster.blurb}"</p>}
 
-      <div className="rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
-        <div className="mb-2 flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400">
+      <div className="panel p-3">
+        <div className="mb-2 flex items-center justify-between font-mono text-[11px] tracking-widest text-phosphor-dim uppercase">
           <span>Incisions</span>
-          <span className="font-mono">{Math.max(0, attemptsLeft)}/{allowed}</span>
+          <span className="text-bone">
+            {Math.max(0, attemptsLeft)}/{allowed}
+          </span>
         </div>
 
         {/* Current guess slots */}
@@ -265,7 +266,7 @@ function AutopsySession({
               type="button"
               onClick={() => clearSlot(i)}
               disabled={phase !== 'playing' || !g}
-              className="flex h-10 w-10 items-center justify-center rounded-md border border-neutral-300 text-lg dark:border-neutral-700"
+              className="flex h-10 w-10 items-center justify-center border border-phosphor-faint text-lg text-phosphor"
             >
               {g ? ORGANS[g]?.glyph : ''}
             </button>
@@ -281,7 +282,7 @@ function AutopsySession({
                 type="button"
                 onClick={() => placeOrgan(organId)}
                 title={ORGANS[organId]?.name ?? organId}
-                className="flex h-10 w-10 items-center justify-center rounded-md border border-neutral-300 text-lg transition-colors hover:border-neutral-500 dark:border-neutral-700"
+                className="flex h-10 w-10 items-center justify-center border border-phosphor-dim text-lg text-phosphor transition-colors hover:border-phosphor hover:bg-phosphor-faint"
               >
                 {ORGANS[organId]?.glyph ?? organId}
               </button>
@@ -294,7 +295,7 @@ function AutopsySession({
             type="button"
             onClick={submit}
             disabled={guess.some((g) => g === null)}
-            className="w-full rounded-md bg-neutral-900 py-2 text-sm font-medium text-white transition disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+            className="w-full border border-phosphor bg-phosphor-faint py-2 font-mono text-xs font-semibold tracking-widest text-phosphor uppercase transition hover:bg-phosphor/20 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Submit
           </button>
@@ -305,16 +306,16 @@ function AutopsySession({
           <div className="mt-3 space-y-1">
             {history.map((h, i) => (
               <div key={i} className="flex items-center gap-1.5">
-                <span className="w-4 text-xs text-neutral-400">{i + 1}</span>
+                <span className="w-4 font-mono text-xs text-phosphor-dim">{i + 1}</span>
                 {h.feedback.map((f, j) => (
                   <span
                     key={j}
-                    className={`flex h-6 w-6 items-center justify-center rounded text-xs ${
+                    className={`flex h-6 w-6 items-center justify-center border font-mono text-xs ${
                       f === 'hit'
-                        ? 'bg-emerald-500 text-white'
+                        ? 'border-phosphor bg-phosphor-faint text-phosphor'
                         : f === 'near'
-                          ? 'bg-amber-400 text-white'
-                          : 'bg-neutral-200 text-neutral-400 dark:bg-neutral-800'
+                          ? 'border-brass bg-brass/15 text-brass'
+                          : 'border-phosphor-faint text-bone-dim'
                     }`}
                   >
                     {f === 'hit' ? '✓' : f === 'near' ? '◐' : '✗'}
@@ -327,26 +328,36 @@ function AutopsySession({
 
         {phase !== 'playing' && (
           <div className="mt-3 space-y-2">
-            <p className={`text-center text-sm font-medium ${phase === 'won' ? 'text-emerald-600' : 'text-red-500'}`}>
-              {phase === 'won' ? 'Specimen identified' : 'Specimen ruined'}
+            <p
+              className={`text-glow text-center font-display text-base uppercase ${
+                phase === 'won' ? 'text-phosphor' : 'text-sanguine'
+              }`}
+            >
+              {phase === 'won' ? 'Specimen Identified' : 'Specimen Ruined'}
             </p>
             {submitting ? (
-              <p className="text-center text-xs text-neutral-400">Logging results…</p>
+              <p className="text-center font-mono text-xs text-bone-dim">Logging results…</p>
             ) : (
               <>
                 {drops && drops.length > 0 ? (
                   <ul className="space-y-1">
-                    {drops.map((d, i) => (
-                      <li key={i} className="rounded-md border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700">
-                        {d.item} <span className="text-xs text-neutral-400">({d.rarity})</span>
-                      </li>
-                    ))}
+                    {drops.map((d, i) => {
+                      const rarity = d.rarity as Rarity
+                      return (
+                        <li key={i} className="panel flex items-center justify-between px-2 py-1.5 font-mono text-sm">
+                          <span className="text-bone">{d.item}</span>
+                          <span className={`text-xs tracking-widest uppercase ${RARITY_TEXT[rarity]}`}>
+                            {rarity}
+                          </span>
+                        </li>
+                      )
+                    })}
                   </ul>
                 ) : (
-                  <p className="text-center text-xs text-neutral-400">Nothing recovered.</p>
+                  <p className="text-center font-mono text-xs text-bone-dim">Nothing recovered.</p>
                 )}
                 {isGM && drops && drops.length > 0 && (
-                  <p className="text-center text-xs text-neutral-400">
+                  <p className="text-center font-mono text-[10px] text-bone-dim">
                     (GM specimen — not logged to Inventory)
                   </p>
                 )}
@@ -354,14 +365,14 @@ function AutopsySession({
                   <button
                     type="button"
                     onClick={() => setSeed((n) => n + 1)}
-                    className="flex-1 rounded-md border border-neutral-300 py-2 text-sm font-medium dark:border-neutral-700"
+                    className="flex-1 border border-phosphor-dim py-2 font-mono text-xs font-medium tracking-widest text-bone uppercase hover:border-phosphor"
                   >
                     Scan again
                   </button>
                   <button
                     type="button"
                     onClick={onExit}
-                    className="flex-1 rounded-md bg-neutral-900 py-2 text-sm font-medium text-white dark:bg-neutral-100 dark:text-neutral-900"
+                    className="flex-1 border border-phosphor bg-phosphor-faint py-2 font-mono text-xs font-medium tracking-widest text-phosphor uppercase hover:bg-phosphor/20"
                   >
                     Choose another
                   </button>

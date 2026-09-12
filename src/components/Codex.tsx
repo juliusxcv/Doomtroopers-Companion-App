@@ -42,9 +42,11 @@ export function Codex({ isGM }: { isGM: boolean }) {
 
   return (
     <div className="space-y-2">
-      <h2 className="text-sm font-medium text-neutral-500 dark:text-neutral-400">Codex</h2>
+      <h2 className="font-mono text-[11px] font-medium tracking-widest text-phosphor-dim uppercase">
+        ++ Codex Archive ++
+      </h2>
       <CodeRedeemer />
-      <div className="rounded-lg border border-neutral-200 p-2 dark:border-neutral-800">
+      <div className="panel p-2">
         <TreeView node={tree} depth={0} isGM={isGM} />
       </div>
     </div>
@@ -82,17 +84,17 @@ function CodeRedeemer() {
             setMessage(null)
           }}
           placeholder="Enter access code"
-          className="min-w-0 flex-1 rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm uppercase tracking-widest outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-900"
+          className="panel min-w-0 flex-1 px-3 py-2 font-mono text-sm tracking-widest text-bone uppercase outline-none focus:border-phosphor"
         />
         <button
           type="submit"
           disabled={busy || !code.trim()}
-          className="shrink-0 rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white transition disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+          className="shrink-0 border border-phosphor bg-phosphor-faint px-3 py-2 font-mono text-xs font-semibold tracking-widest text-phosphor uppercase transition hover:bg-phosphor/20 disabled:cursor-not-allowed disabled:opacity-40"
         >
           Redeem
         </button>
       </div>
-      {message && <p className="text-xs text-neutral-500 dark:text-neutral-400">{message}</p>}
+      {message && <p className="font-mono text-xs text-bone-dim">{message}</p>}
     </form>
   )
 }
@@ -102,10 +104,12 @@ function TreeView({ node, depth, isGM }: { node: TreeNode; depth: number; isGM: 
   const entries = [...node.entries].sort((a, b) => a.title.localeCompare(b.title))
 
   return (
-    <div className={depth > 0 ? 'ml-3 border-l border-neutral-200 pl-3 dark:border-neutral-800' : ''}>
+    <div className={depth > 0 ? 'ml-3 border-l border-phosphor-faint pl-3' : ''}>
       {folders.map(([name, child]) => (
         <details key={name} open={depth < 1}>
-          <summary className="cursor-pointer py-1 text-sm font-medium">{name}</summary>
+          <summary className="cursor-pointer py-1 font-mono text-xs font-medium tracking-widest text-phosphor-dim uppercase">
+            {name}
+          </summary>
           <TreeView node={child} depth={depth + 1} isGM={isGM} />
         </details>
       ))}
@@ -128,13 +132,13 @@ function EntryRow({ entry, isGM }: { entry: CodexEntry; isGM: boolean }) {
           type="button"
           onClick={() => setOpen((v) => !v)}
           disabled={!isGM && !entry.unlocked}
-          className="flex-1 truncate text-left disabled:text-neutral-400 dark:disabled:text-neutral-600"
+          className={`flex-1 truncate text-left font-body ${entry.unlocked ? 'text-bone' : 'text-bone-dim/60'}`}
         >
           {!entry.unlocked && <span className="mr-1">🔒</span>}
           {entry.title}
         </button>
         {isTiered ? (
-          <span className="shrink-0 text-xs text-neutral-400">
+          <span className="shrink-0 font-mono text-[10px] tracking-widest text-phosphor-dim uppercase">
             {entry.unlockedTierCount}/{entry.tierCount} tiers
           </span>
         ) : (
@@ -142,7 +146,7 @@ function EntryRow({ entry, isGM }: { entry: CodexEntry; isGM: boolean }) {
             <button
               type="button"
               onClick={() => setUnlocked({ entryId: entry._id, unlocked: !entry.unlocked })}
-              className="shrink-0 rounded-md border border-neutral-300 px-2 py-0.5 text-xs font-medium dark:border-neutral-700"
+              className="shrink-0 border border-phosphor-dim px-2 py-0.5 font-mono text-[10px] font-medium tracking-widest text-bone uppercase hover:border-phosphor"
             >
               {entry.unlocked ? 'Lock' : 'Unlock'}
             </button>
@@ -151,26 +155,28 @@ function EntryRow({ entry, isGM }: { entry: CodexEntry; isGM: boolean }) {
       </div>
 
       {open && (entry.unlocked || isGM) && (
-        <div className="mt-1 rounded-md bg-neutral-100 p-3 text-sm dark:bg-neutral-900">
+        <div className="mt-1 panel-raised p-3">
           {entry.code && (
-            <p className="mb-2 font-mono text-base font-semibold tracking-wide">{entry.code}</p>
+            <p className="text-glow mb-2 font-mono text-base font-semibold tracking-wide text-phosphor">
+              {entry.code}
+            </p>
           )}
           {isTiered ? (
             entry.tiers && entry.tiers.length > 0 ? (
-              <div className="prose prose-sm prose-neutral dark:prose-invert max-w-none space-y-4">
+              <div className="prose-lore space-y-4">
                 {entry.tiers.map((tier, i) => (
                   <Markdown key={i}>{tier.body}</Markdown>
                 ))}
               </div>
             ) : (
-              <p className="text-neutral-400">Not yet unlocked — needs more successful scans.</p>
+              <p className="font-mono text-xs text-bone-dim">Not yet unlocked — needs more successful scans.</p>
             )
           ) : entry.body ? (
-            <div className="prose prose-sm prose-neutral dark:prose-invert max-w-none">
+            <div className="prose-lore">
               <Markdown>{entry.body}</Markdown>
             </div>
           ) : (
-            <p className="text-neutral-400">No further details.</p>
+            <p className="font-mono text-xs text-bone-dim">No further details.</p>
           )}
         </div>
       )}
