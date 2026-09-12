@@ -37,6 +37,16 @@ function unlockedTierCount(base: number, scanCount: number, tierCount: number): 
   return unlocked
 }
 
+// Ported from the old app's per-creature autopsy table photos. Only the
+// creatures we had a real image for (backed up before the source project
+// was deleted, or bundled in the old app's build) have an entry here —
+// others just render without one.
+const CREATURE_IMAGES: Record<string, string> = {
+  fleshspoil: '/creatures/fleshspoil.png',
+  necromutant: '/creatures/necromutant.png',
+  undead_legionnaire: '/creatures/undead_legionnaire.webp',
+}
+
 function attemptsAllowed(m: Monster): number {
   return Math.max(2, m.organPool.length + m.attemptsModifier)
 }
@@ -243,6 +253,16 @@ function AutopsySession({
         {isIdentified(monster) ? monster.name : monster.code}
       </p>
 
+      {CREATURE_IMAGES[monster.monsterId] && (
+        <div className="panel overflow-hidden">
+          <img
+            src={CREATURE_IMAGES[monster.monsterId]}
+            alt={`Autopsy table — ${monster.name}`}
+            className="aspect-square w-full object-cover"
+          />
+        </div>
+      )}
+
       {monster.blurb && <p className="font-body text-sm text-bone-dim italic">"{monster.blurb}"</p>}
 
       <div className="panel p-3">
@@ -296,26 +316,31 @@ function AutopsySession({
           </button>
         )}
 
-        {/* History */}
+        {/* History — shows what was actually guessed in each slot, not just
+            the feedback, so past attempts are usable for deduction. */}
         {history.length > 0 && (
           <div className="mt-3 space-y-1">
             {history.map((h, i) => (
               <div key={i} className="flex items-center gap-1.5">
                 <span className="w-4 font-mono text-xs text-phosphor-dim">{i + 1}</span>
-                {h.feedback.map((f, j) => (
-                  <span
-                    key={j}
-                    className={`flex h-6 w-6 items-center justify-center border font-mono text-xs ${
-                      f === 'hit'
-                        ? 'border-phosphor bg-phosphor-faint text-phosphor'
-                        : f === 'near'
-                          ? 'border-brass bg-brass/15 text-brass'
-                          : 'border-phosphor-faint text-bone-dim'
-                    }`}
-                  >
-                    {f === 'hit' ? '✓' : f === 'near' ? '◐' : '✗'}
-                  </span>
-                ))}
+                {h.guess.map((organId, j) => {
+                  const f = h.feedback[j]
+                  return (
+                    <span
+                      key={j}
+                      title={`${ORGANS[organId]?.name ?? organId} — ${f}`}
+                      className={`flex h-7 w-7 items-center justify-center border text-base ${
+                        f === 'hit'
+                          ? 'border-phosphor bg-phosphor-faint text-phosphor'
+                          : f === 'near'
+                            ? 'border-brass bg-brass/15 text-brass'
+                            : 'border-phosphor-faint text-bone-dim'
+                      }`}
+                    >
+                      {ORGANS[organId]?.glyph ?? organId}
+                    </span>
+                  )
+                })}
               </div>
             ))}
           </div>
