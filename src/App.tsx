@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { api } from '../convex/_generated/api'
 import type { Id } from '../convex/_generated/dataModel'
 import { Autopsy } from './components/Autopsy'
+import { Bestiary } from './components/Bestiary'
 import { Codex } from './components/Codex'
 import { Inventory } from './components/Inventory'
 
@@ -229,7 +230,7 @@ function JoinSessionForm({ onJoined }: { onJoined: (identity: Identity) => void 
   )
 }
 
-type Feature = 'menu' | 'autopsy' | 'inventory' | 'codex'
+type Feature = 'menu' | 'autopsy' | 'inventory' | 'codex' | 'bestiary'
 type Player = { _id: Id<'players'>; characterName: string; isGM: boolean }
 
 function SessionShell({ identity, onLeave }: { identity: Identity; onLeave: () => void }) {
@@ -286,6 +287,7 @@ function SessionShell({ identity, onLeave }: { identity: Identity; onLeave: () =
       {feature === 'autopsy' && <Autopsy characterId={me.characterId} isGM={me.isGM} />}
       {feature === 'inventory' && <Inventory />}
       {feature === 'codex' && <Codex isGM={me.isGM} />}
+      {feature === 'bestiary' && <Bestiary />}
 
       {profileOpen && (
         <ProfileModal
@@ -306,6 +308,7 @@ function MainMenu({ onSelect }: { onSelect: (feature: Feature) => void }) {
     { key: 'autopsy', label: 'Autopsy', glyph: 'Ψ', description: 'Dissect specimens for loot and scan progress.' },
     { key: 'inventory', label: 'Inventory', glyph: '◈', description: 'Recovered relics, every operator.' },
     { key: 'codex', label: 'Codex', glyph: '⌘', description: 'Archive of unlocked lore.' },
+    { key: 'bestiary', label: 'Stat Cards', glyph: '⚔', description: 'Combat reference for known specimens.' },
   ]
 
   return (

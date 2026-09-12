@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { RARITY } from "./schema";
+import { RARITY, WEAPON } from "./schema";
 import { mutation, query } from "./_generated/server";
 
 const monsterContentFields = {
@@ -12,6 +12,18 @@ const monsterContentFields = {
   identifiedScansRequired: v.number(),
   lootTable: v.array(v.object({ item: v.string(), rarity: RARITY })),
   tierCount: v.number(),
+  stats: v.optional(
+    v.object({
+      rc: v.string(),
+      cc: v.string(),
+      ap: v.string(),
+      mv: v.string(),
+      def: v.string(),
+      hp: v.string(),
+    }),
+  ),
+  weapons: v.optional(v.object({ ranged: v.array(WEAPON), melee: v.array(WEAPON) })),
+  abilities: v.optional(v.array(v.object({ name: v.string(), description: v.string() }))),
 };
 
 // Called by scripts/sync-codex.mjs — the same public Bestiary note that

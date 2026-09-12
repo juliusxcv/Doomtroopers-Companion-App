@@ -9,6 +9,13 @@ export const RARITY = v.union(
   v.literal("legendary"),
 );
 
+export const WEAPON = v.object({
+  name: v.string(),
+  atk: v.string(),
+  dmg: v.string(),
+  wr: v.string(),
+});
+
 export default defineSchema({
   sessions: defineTable({
     code: v.string(),
@@ -31,13 +38,18 @@ export default defineSchema({
     .index("by_session", ["sessionId"])
     .index("by_session_and_character", ["sessionId", "characterId"]),
 
-  // Synced from private creature notes (World Lore/Beastiary/**, NOT
-  // Published/) — see scripts/sync-monsters.mjs. `scanCount` is preserved
-  // across re-syncs just like codex_entries.unlocked, since it's real
-  // progression, not authored content. Drop-chance/tier balance data from the
-  // old app's `monster_loot` table didn't survive (source Supabase project
-  // was deleted before it got backed up) — item rarities here were
-  // reconstructed from the old loot_log backup's historical drops instead.
+  // Synced from the vault's Published/CODEX/Bestiary notes — see
+  // scripts/sync-codex.mjs. `scanCount` is preserved across re-syncs just
+  // like codex_entries.unlocked, since it's real progression, not authored
+  // content. Drop-chance/tier balance data from the old app's `monster_loot`
+  // table didn't survive (source Supabase project was deleted before it got
+  // backed up) — item rarities here were reconstructed from the old
+  // loot_log backup's historical drops instead.
+  //
+  // `stats`/`weapons`/`abilities` power the Monster Stat Card feature — a
+  // combat quick-reference, separate from the Autopsy Report's lore tiers.
+  // All optional: a creature note with no "## Stats"/"## Weapons"/
+  // "## Abilities" sections simply has no card content yet.
   monsters: defineTable({
     monsterId: v.string(),
     code: v.string(),
@@ -49,6 +61,23 @@ export default defineSchema({
     tierCount: v.number(),
     lootTable: v.array(v.object({ item: v.string(), rarity: RARITY })),
     scanCount: v.number(),
+    stats: v.optional(
+      v.object({
+        rc: v.string(),
+        cc: v.string(),
+        ap: v.string(),
+        mv: v.string(),
+        def: v.string(),
+        hp: v.string(),
+      }),
+    ),
+    weapons: v.optional(
+      v.object({
+        ranged: v.array(WEAPON),
+        melee: v.array(WEAPON),
+      }),
+    ),
+    abilities: v.optional(v.array(v.object({ name: v.string(), description: v.string() }))),
   }).index("by_monster_id", ["monsterId"]),
 
   // Campaign-wide (not session-scoped) — items persist for a character across

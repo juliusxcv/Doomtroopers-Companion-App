@@ -98,6 +98,94 @@ function buildRarityMap(backupDir) {
   return result;
 }
 
+// Extracts the raw text under a "## Name" (or "### Name" when level=3)
+// heading, up to the next heading of the same level. Returns null if the
+// heading isn't present.
+function extractSection(body, level, name) {
+  const hashes = "#".repeat(level);
+  const headingRe = new RegExp(`^${hashes}\\s*${name}\\s*:?\\s*$`, "im");
+  const m = body.match(headingRe);
+  if (!m) return null;
+  const after = body.slice(m.index + m[0].length);
+  const nextIdx = after.search(new RegExp(`\\n${hashes}\\s`));
+  return (nextIdx === -1 ? after : after.slice(0, nextIdx)).trim();
+}
+
+// Parses a generic markdown pipe table (header row, "---" separator row,
+// data rows) into an array of { <lowercase header>: cell } objects.
+function parsePipeTable(text) {
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.startsWith("|"));
+  if (lines.length < 2) return [];
+  const cells = (line) =>
+    line
+      .replace(/^\|/, "")
+      .replace(/\|$/, "")
+      .split("|")
+      .map((c) => c.trim());
+  const header = cells(lines[0]).map((h) => h.toLowerCase());
+  return lines.slice(2).map((line) => {
+    const values = cells(line);
+    const row = {};
+    header.forEach((h, i) => (row[h] = values[i] ?? ""));
+    return row;
+  });
+}
+
+// "## Stats" section: a single-row RC/CC/AP/MV/DEF/HP table. Kept as raw
+// strings (not coerced to numbers) since these are dice-notation values
+// like "4+" or distances like `7"`, not always plain integers.
+function parseStats(body) {
+  const section = extractSection(body, 2, "Stats");
+  if (!section) return undefined;
+  const [row] = parsePipeTable(section);
+  if (!row) return undefined;
+  const pick = (key) => (row[key] ?? "").trim();
+  return { rc: pick("rc"), cc: pick("cc"), ap: pick("ap"), mv: pick("mv"), def: pick("def"), hp: pick("hp") };
+}
+
+// "## Weapons" section: "### Ranged" and "### Melee" sub-tables, each a
+// Weapon/ATK/DMG/WR pipe table.
+function parseWeapons(body) {
+  const section = extractSection(body, 2, "Weapons");
+  if (!section) return undefined;
+  const toWeapons = (sub) => {
+    const rows = sub ? parsePipeTable(sub) : [];
+    return rows
+      .map((r) => ({
+        name: (r.weapon ?? "").trim(),
+        atk: (r.atk ?? "").trim(),
+        dmg: (r.dmg ?? "").trim(),
+        wr: (r.wr ?? "").trim(),
+      }))
+      .filter((w) => w.name);
+  };
+  const ranged = toWeapons(extractSection(section, 3, "Ranged"));
+  const melee = toWeapons(extractSection(section, 3, "Melee"));
+  if (ranged.length === 0 && melee.length === 0) return undefined;
+  return { ranged, melee };
+}
+
+// "## Abilities" section: a bullet list, "- **Name**: description" (the
+// description is optional — a bare "- Name" is kept with an empty one).
+function parseAbilities(body) {
+  const section = extractSection(body, 2, "Abilities");
+  if (!section) return undefined;
+  const abilities = section
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.startsWith("-"))
+    .map((line) => {
+      const stripped = line.replace(/^-+\s*/, "");
+      const m = stripped.match(/^\*\*(.+?)\*\*:?\s*(.*)$/);
+      return m ? { name: m[1].trim(), description: m[2].trim() } : { name: stripped, description: "" };
+    })
+    .filter((a) => a.name);
+  return abilities.length > 0 ? abilities : undefined;
+}
+
 function slugify(input) {
   return input
     .toLowerCase()
@@ -186,6 +274,9 @@ for (const file of files) {
       identifiedScansRequired: Number(fm.identified ?? 0),
       lootTable,
       tierCount: tiers ? tiers.length : 0,
+      stats: parseStats(content),
+      weapons: parseWeapons(content),
+      abilities: parseAbilities(content),
     });
   } else if (monsterId && organPool.length > 0) {
     warnings.push(`${relPath}: only ${organPool.length} organs — not playable, skipped from monsters.`);
