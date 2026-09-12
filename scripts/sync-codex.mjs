@@ -32,6 +32,27 @@ if (!fs.existsSync(publishedDir)) {
 
 const RARITIES = new Set(["scrap", "common", "uncommon", "rare", "legendary"]);
 
+// A single global "Item | Rarity" reference table, authored by the GM
+// under Published/ (same "sync only reads Published/" rule as everything
+// else) — takes priority over the historical-log guess below. Not synced
+// as a codex entry itself; it's config, not player-facing content.
+const RARITY_TABLE_FILENAME = "Lootdrop Table.md";
+
+function parseRarityTable(content) {
+  const lines = content
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.startsWith("|"));
+  const rows = parsePipeTable(lines);
+  const map = new Map();
+  for (const row of rows) {
+    const item = (row.item ?? "").trim();
+    const rarity = (row.rarity ?? "").trim().toLowerCase();
+    if (item && RARITIES.has(rarity)) map.set(item.toLowerCase(), rarity);
+  }
+  return map;
+}
+
 // Splits a note's body on "## LVL N Autopsy:" headers, one chunk per tier,
 // in order. Returns null if the note has no such sections.
 function splitTiers(body) {
@@ -248,12 +269,20 @@ function walk(dir, files = []) {
 
 const rarityMap = buildRarityMap(backupDir);
 const files = walk(publishedDir);
+
+const rarityTableFile = files.find((f) => path.basename(f) === RARITY_TABLE_FILENAME);
+const explicitRarityMap = rarityTableFile
+  ? parseRarityTable(matter(fs.readFileSync(rarityTableFile, "utf8")).content)
+  : new Map();
+
 const entries = [];
 const monsters = [];
 const warnings = [];
 const slugSources = new Map();
 
 for (const file of files) {
+  if (path.basename(file) === RARITY_TABLE_FILENAME) continue;
+
   const raw = fs.readFileSync(file, "utf8");
   const { data: fm, content } = matter(raw);
 
@@ -303,8 +332,9 @@ for (const file of files) {
   if (monsterId && organPool.length >= 3) {
     const lootItems = parseLootTable(content);
     const lootTable = lootItems.map((item) => {
-      const rarity = rarityMap.get(item.toLowerCase());
-      if (!rarity) warnings.push(`${relPath}: "${item}" has no historical rarity — defaulted to "common".`);
+      const key = item.toLowerCase();
+      const rarity = explicitRarityMap.get(key) ?? rarityMap.get(key);
+      if (!rarity) warnings.push(`${relPath}: "${item}" has no listed or historical rarity — defaulted to "common".`);
       return { item, rarity: rarity && RARITIES.has(rarity) ? rarity : "common" };
     });
 
