@@ -188,11 +188,6 @@ function SpecimenSelect({
         <ul className="space-y-1.5">
           {monsters.map((m) => {
             const displayName = isIdentified(m) ? m.name : m.code
-            const showProgress = m.identifiedScansRequired > 0 && m.tierCount > 0
-            const thresholds = showProgress
-              ? Array.from({ length: m.tierCount }, (_, i) => tierThreshold(m.identifiedScansRequired, i))
-              : []
-            const unlocked = showProgress ? unlockedTierCount(m.identifiedScansRequired, m.scanCount, m.tierCount) : 0
             return (
               <li key={m.monsterId}>
                 <button
@@ -210,9 +205,6 @@ function SpecimenSelect({
                       <> · scans {m.scanCount}/{m.identifiedScansRequired}</>
                     )}
                   </div>
-                  {showProgress && (
-                    <ScanTierBar scanCount={m.scanCount} thresholds={thresholds} unlocked={unlocked} total={m.tierCount} />
-                  )}
                 </button>
               </li>
             )
@@ -240,6 +232,13 @@ function AutopsySession({
   const palette = monster.organPool
   const sequenceLen = palette.length
   const allowed = attemptsAllowed(monster)
+  const showProgress = monster.identifiedScansRequired > 0 && monster.tierCount > 0
+  const thresholds = showProgress
+    ? Array.from({ length: monster.tierCount }, (_, i) => tierThreshold(monster.identifiedScansRequired, i))
+    : []
+  const unlocked = showProgress
+    ? unlockedTierCount(monster.identifiedScansRequired, monster.scanCount, monster.tierCount)
+    : 0
 
   const [seed, setSeed] = useState(0)
   const solution = useMemo(() => generateSolution(palette, sequenceLen), [palette, sequenceLen, seed])
@@ -324,6 +323,10 @@ function AutopsySession({
       )}
 
       {monster.blurb && <p className="font-body text-sm text-bone-dim italic">"{monster.blurb}"</p>}
+
+      {showProgress && (
+        <ScanTierBar scanCount={monster.scanCount} thresholds={thresholds} unlocked={unlocked} total={monster.tierCount} />
+      )}
 
       <div className="panel p-3">
         <div className="mb-2 flex items-center justify-between font-mono text-[11px] tracking-widest text-phosphor-dim uppercase">
