@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from 'convex/react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../convex/_generated/api'
 import type { Doc, Id } from '../../convex/_generated/dataModel'
 import { RARITY_TEXT, type Rarity } from '../lib/rarity'
@@ -136,7 +136,7 @@ function ScanTierBar({
       <div className="relative h-8 px-1">
         <div className="absolute top-2 right-0 left-0 h-2 border border-phosphor-faint bg-black/40" />
         <div
-          className="absolute top-2 left-0 h-2 bg-phosphor transition-[width] duration-500"
+          className="absolute top-2 left-0 h-2 bg-phosphor transition-[width] duration-700 ease-out"
           style={{ width: `${progressPct}%`, boxShadow: glow }}
         />
         {thresholds.map((t, i) => {
@@ -150,11 +150,11 @@ function ScanTierBar({
               title={`Tier ${i + 1} @ ${t} scans`}
             >
               <div
-                className={`mt-1.5 h-3 w-3 rotate-45 border ${reached ? 'border-phosphor bg-phosphor' : 'border-phosphor-dim bg-ink'}`}
+                className={`mt-1.5 h-3 w-3 rotate-45 border transition-all duration-500 ${reached ? 'border-phosphor bg-phosphor' : 'border-phosphor-dim bg-ink'}`}
                 style={reached ? { boxShadow: glow } : undefined}
               />
               <span
-                className={`mt-1 font-mono text-[8px] leading-none tracking-widest ${
+                className={`mt-1 font-mono text-[8px] leading-none tracking-widest transition-colors duration-500 ${
                   reached ? 'text-glow text-phosphor' : 'text-phosphor-dim'
                 }`}
               >
@@ -215,7 +215,22 @@ function SpecimenSelect({
   )
 }
 
-type Phase = 'playing' | 'won' | 'lost'
+type Phase = 'playing' | 'progress' | 'won' | 'lost'
+
+type ProgressAnim = {
+  prevScanCount: number
+  newScanCount: number
+  prevUnlocked: number
+  newUnlocked: number
+}
+
+// Timing for the post-scan reward beat: a short breath, then the bar fills
+// (duration must match ScanTierBar's fill transition), then — if a tier was
+// crossed — a celebration banner holds before the loot reveal.
+const PROGRESS_FILL_DELAY = 300
+const PROGRESS_FILL_DURATION = 700
+const PROGRESS_CELEBRATE_HOLD = 1600
+const PROGRESS_SETTLE_HOLD = 500
 
 function AutopsySession({
   monster,
@@ -236,9 +251,6 @@ function AutopsySession({
   const thresholds = showProgress
     ? Array.from({ length: monster.tierCount }, (_, i) => tierThreshold(monster.identifiedScansRequired, i))
     : []
-  const unlocked = showProgress
-    ? unlockedTierCount(monster.identifiedScansRequired, monster.scanCount, monster.tierCount)
-    : 0
 
   const [seed, setSeed] = useState(0)
   const solution = useMemo(() => generateSolution(palette, sequenceLen), [palette, sequenceLen, seed])
@@ -248,13 +260,63 @@ function AutopsySession({
   const [drops, setDrops] = useState<{ item: string; rarity: string }[] | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
+  // Scan count shown on the bar. Kept as local state (rather than reading
+  // monster.scanCount directly) so a win can animate from the old count to
+  // the new one instead of snapping the instant Convex's reactive query
+  // updates — see the sync effect and the progressAnim effect below.
+  const [displayScanCount, setDisplayScanCount] = useState(monster.scanCount)
+  const [progressAnim, setProgressAnim] = useState<ProgressAnim | null>(null)
+  const [celebrateTier, setCelebrateTier] = useState<number | null>(null)
+  const isAnimatingRef = useRef(false)
+
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     setGuess(Array(sequenceLen).fill(null))
     setHistory([])
     setPhase('playing')
     setDrops(null)
+    setProgressAnim(null)
+    setCelebrateTier(null)
+    isAnimatingRef.current = false
+    setDisplayScanCount(monster.scanCount)
   }, [seed, sequenceLen])
+
+  // Reflects other players' scans on the same specimen live while idle,
+  // without clobbering our own in-flight reward animation.
+  useEffect(() => {
+    if (!isAnimatingRef.current) setDisplayScanCount(monster.scanCount)
+  }, [monster.scanCount])
+
+  const unlocked = showProgress
+    ? unlockedTierCount(monster.identifiedScansRequired, displayScanCount, monster.tierCount)
+    : 0
+
+  // Drives the reward beat after a successful scan: fill the bar from the
+  // old count to the new one, then — if that crossed a tier threshold —
+  // hold on a celebration banner before handing off to the loot reveal.
+  useEffect(() => {
+    if (!progressAnim) return
+    const tierUnlocked = progressAnim.newUnlocked > progressAnim.prevUnlocked
+    const timers: ReturnType<typeof setTimeout>[] = []
+    timers.push(setTimeout(() => setDisplayScanCount(progressAnim.newScanCount), PROGRESS_FILL_DELAY))
+    const settleAt =
+      PROGRESS_FILL_DELAY + PROGRESS_FILL_DURATION + (tierUnlocked ? PROGRESS_CELEBRATE_HOLD : PROGRESS_SETTLE_HOLD)
+    if (tierUnlocked) {
+      timers.push(
+        setTimeout(
+          () => setCelebrateTier(progressAnim.newUnlocked),
+          PROGRESS_FILL_DELAY + PROGRESS_FILL_DURATION,
+        ),
+      )
+    }
+    timers.push(
+      setTimeout(() => {
+        isAnimatingRef.current = false
+        setPhase('won')
+      }, settleAt),
+    )
+    return () => timers.forEach(clearTimeout)
+  }, [progressAnim])
 
   const attemptsUsed = history.length
   const attemptsLeft = allowed - attemptsUsed
@@ -288,7 +350,13 @@ function AutopsySession({
     setHistory(newHistory)
 
     if (won || newHistory.length >= allowed) {
-      setPhase(won ? 'won' : 'lost')
+      const willAnimateProgress = won && showProgress
+      const prevScanCount = monster.scanCount
+      const prevUnlocked = showProgress
+        ? unlockedTierCount(monster.identifiedScansRequired, prevScanCount, monster.tierCount)
+        : 0
+      if (willAnimateProgress) isAnimatingRef.current = true
+      setPhase(willAnimateProgress ? 'progress' : won ? 'won' : 'lost')
       setSubmitting(true)
       try {
         const result = await submitResult({
@@ -298,6 +366,10 @@ function AutopsySession({
           attemptsUsed: newHistory.length,
         })
         setDrops(result.drops)
+        if (willAnimateProgress) {
+          const newUnlocked = unlockedTierCount(monster.identifiedScansRequired, result.scanCount, monster.tierCount)
+          setProgressAnim({ prevScanCount, newScanCount: result.scanCount, prevUnlocked, newUnlocked })
+        }
       } finally {
         setSubmitting(false)
       }
@@ -325,7 +397,7 @@ function AutopsySession({
       {monster.blurb && <p className="font-body text-sm text-bone-dim italic">"{monster.blurb}"</p>}
 
       {showProgress && (
-        <ScanTierBar scanCount={monster.scanCount} thresholds={thresholds} unlocked={unlocked} total={monster.tierCount} />
+        <ScanTierBar scanCount={displayScanCount} thresholds={thresholds} unlocked={unlocked} total={monster.tierCount} />
       )}
 
       <div className="panel p-3">
@@ -413,13 +485,25 @@ function AutopsySession({
           <div className="mt-3 space-y-2">
             <p
               className={`text-glow text-center font-display text-base uppercase ${
-                phase === 'won' ? 'text-phosphor' : 'text-sanguine'
+                phase === 'lost' ? 'text-sanguine' : 'text-phosphor'
               }`}
             >
-              {phase === 'won' ? 'Specimen Identified' : 'Specimen Ruined'}
+              {phase === 'lost' ? 'Specimen Ruined' : 'Specimen Identified'}
             </p>
+
             {submitting ? (
               <p className="text-center font-mono text-xs text-bone-dim">Logging results…</p>
+            ) : phase === 'progress' ? (
+              celebrateTier !== null && (
+                <div className="animate-tier-unlock animate-tier-glow border border-phosphor bg-phosphor-faint px-3 py-2 text-center">
+                  <p className="text-glow font-display text-sm tracking-widest text-phosphor uppercase">
+                    ◆ Dossier Tier {celebrateTier} Unlocked ◆
+                  </p>
+                  <p className="mt-0.5 font-mono text-[10px] tracking-widest text-phosphor-dim uppercase">
+                    New Autopsy Report Available
+                  </p>
+                </div>
+              )
             ) : (
               <>
                 {drops && drops.length > 0 ? (
