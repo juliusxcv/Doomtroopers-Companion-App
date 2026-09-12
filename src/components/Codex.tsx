@@ -4,7 +4,9 @@ import Markdown from 'react-markdown'
 import { api } from '../../convex/_generated/api'
 import type { Doc } from '../../convex/_generated/dataModel'
 
-type CodexEntry = Doc<'codex_entries'>
+// listForGM/listForPlayers add computed tier-progress fields not stored on
+// the document itself — see convex/codex.ts.
+type CodexEntry = Doc<'codex_entries'> & { tierCount?: number; unlockedTierCount?: number }
 
 type TreeNode = {
   name: string
@@ -117,6 +119,7 @@ function TreeView({ node, depth, isGM }: { node: TreeNode; depth: number; isGM: 
 function EntryRow({ entry, isGM }: { entry: CodexEntry; isGM: boolean }) {
   const [open, setOpen] = useState(false)
   const setUnlocked = useMutation(api.codex.setUnlocked)
+  const isTiered = entry.tiers !== undefined
 
   return (
     <div className="py-1 text-sm">
@@ -130,14 +133,20 @@ function EntryRow({ entry, isGM }: { entry: CodexEntry; isGM: boolean }) {
           {!entry.unlocked && <span className="mr-1">🔒</span>}
           {entry.title}
         </button>
-        {isGM && (
-          <button
-            type="button"
-            onClick={() => setUnlocked({ entryId: entry._id, unlocked: !entry.unlocked })}
-            className="shrink-0 rounded-md border border-neutral-300 px-2 py-0.5 text-xs font-medium dark:border-neutral-700"
-          >
-            {entry.unlocked ? 'Lock' : 'Unlock'}
-          </button>
+        {isTiered ? (
+          <span className="shrink-0 text-xs text-neutral-400">
+            {entry.unlockedTierCount}/{entry.tierCount} tiers
+          </span>
+        ) : (
+          isGM && (
+            <button
+              type="button"
+              onClick={() => setUnlocked({ entryId: entry._id, unlocked: !entry.unlocked })}
+              className="shrink-0 rounded-md border border-neutral-300 px-2 py-0.5 text-xs font-medium dark:border-neutral-700"
+            >
+              {entry.unlocked ? 'Lock' : 'Unlock'}
+            </button>
+          )
         )}
       </div>
 
@@ -146,7 +155,17 @@ function EntryRow({ entry, isGM }: { entry: CodexEntry; isGM: boolean }) {
           {entry.code && (
             <p className="mb-2 font-mono text-base font-semibold tracking-wide">{entry.code}</p>
           )}
-          {entry.body ? (
+          {isTiered ? (
+            entry.tiers && entry.tiers.length > 0 ? (
+              <div className="prose prose-sm prose-neutral dark:prose-invert max-w-none space-y-4">
+                {entry.tiers.map((tier, i) => (
+                  <Markdown key={i}>{tier.body}</Markdown>
+                ))}
+              </div>
+            ) : (
+              <p className="text-neutral-400">Not yet unlocked — needs more successful scans.</p>
+            )
+          ) : entry.body ? (
             <div className="prose prose-sm prose-neutral dark:prose-invert max-w-none">
               <Markdown>{entry.body}</Markdown>
             </div>

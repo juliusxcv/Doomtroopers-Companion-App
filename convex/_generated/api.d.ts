@@ -11,7 +11,7 @@
 import type * as characters from "../characters.js";
 import type * as codex from "../codex.js";
 import type * as inventory from "../inventory.js";
-import type * as loot from "../loot.js";
+import type * as monsters from "../monsters.js";
 import type * as sessions from "../sessions.js";
 
 import type {
@@ -24,7 +24,7 @@ declare const fullApi: ApiFromModules<{
   characters: typeof characters;
   codex: typeof codex;
   inventory: typeof inventory;
-  loot: typeof loot;
+  monsters: typeof monsters;
   sessions: typeof sessions;
 }>;
 

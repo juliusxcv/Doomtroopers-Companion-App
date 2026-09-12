@@ -24,6 +24,30 @@ if (!fs.existsSync(publishedDir)) {
   process.exit(1);
 }
 
+// The public Bestiary autopsy report notes don't carry `monster_id` yet
+// (the private creature notes do). These 4 are the known display-name
+// mismatches from the old app's vault-id-migration — prefer an explicit
+// `monster_id` frontmatter field over this if one is ever added.
+const AUTOPSY_MONSTER_ID_FALLBACK = {
+  "Fleshspoil - Autopsy Report": "fleshspoil",
+  "Spore Wretch - Autopsy Report": "sporewretch",
+  "Undead Cadaver - Autopsy Report": "undead_legionnaire",
+  "Undead Mutant - Autopsy Report": "necromutant",
+};
+
+// Splits a note's body on "## LVL N Autopsy:" headers, one chunk per tier,
+// in order. Returns null if the note has no such sections.
+function splitTiers(body) {
+  const headerRe = /^##\s*LVL\s*\d+\s*Autopsy:/gim;
+  const matches = [...body.matchAll(headerRe)];
+  if (matches.length === 0) return null;
+  return matches.map((m, i) => {
+    const start = m.index;
+    const end = i + 1 < matches.length ? matches[i + 1].index : body.length;
+    return { body: body.slice(start, end).trim() };
+  });
+}
+
 function slugify(input) {
   return input
     .toLowerCase()
@@ -68,6 +92,15 @@ for (const file of files) {
   }
   slugSources.set(slug, relPath);
 
+  const tiers = splitTiers(body);
+  let monsterId;
+  if (tiers) {
+    monsterId = fm.monster_id ? String(fm.monster_id) : AUTOPSY_MONSTER_ID_FALLBACK[title];
+    if (!monsterId) {
+      warnings.push(`${relPath}: has LVL Autopsy sections but no monster_id link — tiers will never unlock.`);
+    }
+  }
+
   entries.push({
     slug,
     title,
@@ -77,7 +110,9 @@ for (const file of files) {
     code: fm.code !== undefined ? String(fm.code).trim().toUpperCase() : undefined,
     cost: fm.cost !== undefined ? Number(fm.cost) : undefined,
     lvl: fm.lvl !== undefined ? String(fm.lvl) : undefined,
-    body,
+    body: tiers ? "" : body,
+    tiers: tiers ?? undefined,
+    monsterId,
   });
 }
 

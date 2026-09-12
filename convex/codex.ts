@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, type QueryCtx } from "./_generated/server";
 
 const entryContentFields = {
   slug: v.string(),
@@ -11,7 +11,28 @@ const entryContentFields = {
   cost: v.optional(v.number()),
   lvl: v.optional(v.string()),
   body: v.string(),
+  tiers: v.optional(v.array(v.object({ body: v.string() }))),
+  monsterId: v.optional(v.string()),
 };
+
+// Mirrors the old app's autopsy-tiers.ts curve exactly (tier 0 = base,
+// tier 1 = 15x, tier 2 = 45x, tier 3 = 120x) so ported scan-count data means
+// the same thing here as it did there.
+const TIER_MULTIPLIERS = [1, 15, 45, 120];
+
+function tierThreshold(base: number, tierIndex: number): number {
+  const mult = TIER_MULTIPLIERS[tierIndex] ?? TIER_MULTIPLIERS[TIER_MULTIPLIERS.length - 1];
+  return Math.max(0, Math.trunc(base)) * mult;
+}
+
+function computeUnlockedTierCount(base: number, scanCount: number, tierCount: number): number {
+  let unlocked = 0;
+  for (let i = 0; i < tierCount; i++) {
+    if (scanCount >= tierThreshold(base, i)) unlocked = i + 1;
+    else break;
+  }
+  return unlocked;
+}
 
 // Called by scripts/sync-codex.mjs. `unlocked` is intentionally absent from
 // entryContentFields so a re-sync never touches it on existing entries —
@@ -44,21 +65,58 @@ export const sync = mutation({
   },
 });
 
-// GM sees everything, locked or not — needed to decide what to unlock.
+function tierProgress(ctx: QueryCtx, monsterId: string) {
+  return ctx.db
+    .query("monsters")
+    .withIndex("by_monster_id", (q) => q.eq("monsterId", monsterId))
+    .unique();
+}
+
+// GM sees every tier's full text, plus how many are actually unlocked (tier
+// unlock is automatic, computed from scan count — not the GM toggle).
 export const listForGM = query({
   args: {},
   handler: async (ctx) => {
-    return await ctx.db.query("codex_entries").collect();
+    const entries = await ctx.db.query("codex_entries").collect();
+    return await Promise.all(
+      entries.map(async (e) => {
+        if (!e.tiers || !e.monsterId) return e;
+        const monster = await tierProgress(ctx, e.monsterId);
+        const unlockedTierCount = monster
+          ? computeUnlockedTierCount(monster.identifiedScansRequired, monster.scanCount, e.tiers.length)
+          : 0;
+        return { ...e, tierCount: e.tiers.length, unlockedTierCount, scanCount: monster?.scanCount ?? 0 };
+      }),
+    );
   },
 });
 
 // Players see every entry's existence (so the Codex tree shows what's out
-// there) but locked entries have their content stripped.
+// there) but locked entries/tiers have their content stripped — a locked
+// tier's text never reaches the client, same principle as the old app's
+// server-side gate.
 export const listForPlayers = query({
   args: {},
   handler: async (ctx) => {
-    const all = await ctx.db.query("codex_entries").collect();
-    return all.map((e) => (e.unlocked ? e : { ...e, body: "", code: undefined }));
+    const entries = await ctx.db.query("codex_entries").collect();
+    return await Promise.all(
+      entries.map(async (e) => {
+        if (e.tiers && e.monsterId) {
+          const monster = await tierProgress(ctx, e.monsterId);
+          const unlockedTierCount = monster
+            ? computeUnlockedTierCount(monster.identifiedScansRequired, monster.scanCount, e.tiers.length)
+            : 0;
+          return {
+            ...e,
+            tiers: e.tiers.slice(0, unlockedTierCount),
+            tierCount: e.tiers.length,
+            unlockedTierCount,
+            unlocked: unlockedTierCount > 0,
+          };
+        }
+        return e.unlocked ? e : { ...e, body: "", code: undefined };
+      }),
+    );
   },
 });
 

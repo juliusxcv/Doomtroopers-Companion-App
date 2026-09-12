@@ -2,10 +2,9 @@ import { useMutation, useQuery } from 'convex/react'
 import { useState } from 'react'
 import { api } from '../convex/_generated/api'
 import type { Id } from '../convex/_generated/dataModel'
+import { Autopsy } from './components/Autopsy'
 import { Codex } from './components/Codex'
 import { Inventory } from './components/Inventory'
-import { LootBoard } from './components/LootBoard'
-import { ScanMinigame } from './components/ScanMinigame'
 
 type Identity = { sessionId: Id<'sessions'>; playerId: Id<'players'> }
 
@@ -267,7 +266,7 @@ function SessionView({ identity, onLeave }: { identity: Identity; onLeave: () =>
         </ul>
       </div>
 
-      <SessionTabs sessionId={identity.sessionId} playerId={identity.playerId} isGM={me?.isGM ?? false} />
+      {me && <SessionTabs characterId={me.characterId} isGM={me.isGM} />}
 
       <button onClick={onLeave} className="w-full text-center text-sm text-neutral-500 underline dark:text-neutral-400">
         Leave session
@@ -277,18 +276,16 @@ function SessionView({ identity, onLeave }: { identity: Identity; onLeave: () =>
 }
 
 function SessionTabs({
-  sessionId,
-  playerId,
+  characterId,
   isGM,
 }: {
-  sessionId: Id<'sessions'>
-  playerId: Id<'players'>
+  characterId: Id<'characters'>
   isGM: boolean
 }) {
-  const [tab, setTab] = useState<'loot' | 'inventory' | 'codex'>('loot')
+  const [tab, setTab] = useState<'autopsy' | 'inventory' | 'codex'>('autopsy')
 
   const tabs = [
-    { key: 'loot', label: 'Loot' },
+    { key: 'autopsy', label: 'Autopsy' },
     { key: 'inventory', label: 'Inventory' },
     { key: 'codex', label: 'Codex' },
   ] as const
@@ -312,12 +309,7 @@ function SessionTabs({
         ))}
       </div>
 
-      {tab === 'loot' && (
-        <>
-          <ScanMinigame sessionId={sessionId} />
-          <LootBoard sessionId={sessionId} playerId={playerId} />
-        </>
-      )}
+      {tab === 'autopsy' && <Autopsy characterId={characterId} isGM={isGM} />}
       {tab === 'inventory' && <Inventory />}
       {tab === 'codex' && <Codex isGM={isGM} />}
     </div>

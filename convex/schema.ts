@@ -1,6 +1,14 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
+export const RARITY = v.union(
+  v.literal("scrap"),
+  v.literal("common"),
+  v.literal("uncommon"),
+  v.literal("rare"),
+  v.literal("legendary"),
+);
+
 export default defineSchema({
   sessions: defineTable({
     code: v.string(),
@@ -23,23 +31,25 @@ export default defineSchema({
     .index("by_session", ["sessionId"])
     .index("by_session_and_character", ["sessionId", "characterId"]),
 
-  // Seeded manually for Phase 1. Will eventually sync from a single
-  // centralized "Loot Tables" note in the vault (Monster | Item | Weight),
-  // not per-monster frontmatter — see project memory:
-  // project-obsidian-vault-sync-learnings.
-  loot_tables: defineTable({
-    monsterSlug: v.string(),
-    monsterName: v.string(),
-    entries: v.array(v.object({ item: v.string(), weight: v.number() })),
-  }).index("by_slug", ["monsterSlug"]),
-
-  loot_drops: defineTable({
-    sessionId: v.id("sessions"),
-    monsterName: v.string(),
-    item: v.string(),
-    claimedBy: v.optional(v.id("players")),
-    createdAt: v.number(),
-  }).index("by_session", ["sessionId"]),
+  // Synced from private creature notes (World Lore/Beastiary/**, NOT
+  // Published/) — see scripts/sync-monsters.mjs. `scanCount` is preserved
+  // across re-syncs just like codex_entries.unlocked, since it's real
+  // progression, not authored content. Drop-chance/tier balance data from the
+  // old app's `monster_loot` table didn't survive (source Supabase project
+  // was deleted before it got backed up) — item rarities here were
+  // reconstructed from the old loot_log backup's historical drops instead.
+  monsters: defineTable({
+    monsterId: v.string(),
+    code: v.string(),
+    name: v.string(),
+    blurb: v.optional(v.string()),
+    organPool: v.array(v.string()),
+    attemptsModifier: v.number(),
+    identifiedScansRequired: v.number(),
+    tierCount: v.number(),
+    lootTable: v.array(v.object({ item: v.string(), rarity: RARITY })),
+    scanCount: v.number(),
+  }).index("by_monster_id", ["monsterId"]),
 
   // Campaign-wide (not session-scoped) — items persist for a character across
   // every session. Ported 1:1 from the old app's `loot_log` table; see
@@ -49,13 +59,7 @@ export default defineSchema({
   inventory: defineTable({
     characterId: v.id("characters"),
     itemName: v.string(),
-    rarity: v.union(
-      v.literal("scrap"),
-      v.literal("common"),
-      v.literal("uncommon"),
-      v.literal("rare"),
-      v.literal("legendary"),
-    ),
+    rarity: RARITY,
     source: v.string(),
     monsterId: v.optional(v.string()),
     smelted: v.boolean(),
@@ -66,6 +70,12 @@ export default defineSchema({
   // `unlocked` is campaign-wide, not tied to a session join-code, and is
   // deliberately preserved across re-syncs — only content fields get
   // overwritten when a note changes.
+  //
+  // Autopsy Report entries are a special case: their body is split into
+  // `tiers` (one per "## LVL N Autopsy:" section) instead of using `body` +
+  // `unlocked` directly. Unlock state for those is computed from the linked
+  // monster's scanCount at query time, not stored per-entry — `monsterId`
+  // is how that link is made (see scripts/sync-codex.mjs and convex/codex.ts).
   codex_entries: defineTable({
     slug: v.string(),
     title: v.string(),
@@ -76,6 +86,8 @@ export default defineSchema({
     cost: v.optional(v.number()),
     lvl: v.optional(v.string()),
     body: v.string(),
+    tiers: v.optional(v.array(v.object({ body: v.string() }))),
+    monsterId: v.optional(v.string()),
     unlocked: v.boolean(),
     syncedAt: v.number(),
   })
