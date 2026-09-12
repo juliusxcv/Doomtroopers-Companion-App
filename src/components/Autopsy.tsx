@@ -104,6 +104,70 @@ export function Autopsy({ characterId, isGM }: { characterId: Id<'characters'>; 
   )
 }
 
+// Ported from the old app's ScanTierBar — a timeline with a diamond marker
+// at each tier's scan threshold, so players can see exactly how many more
+// scans the next level needs, not just an abstract filled/unfilled segment.
+function ScanTierBar({
+  scanCount,
+  thresholds,
+  unlocked,
+  total,
+}: {
+  scanCount: number
+  thresholds: number[]
+  unlocked: number
+  total: number
+}) {
+  const maxThreshold = thresholds[thresholds.length - 1] ?? 1
+  const progressPct = Math.min(100, (scanCount / maxThreshold) * 100)
+  const nextThreshold = unlocked < total ? thresholds[unlocked] : null
+  const glow = '0 0 8px var(--color-phosphor), 0 0 14px color-mix(in oklab, var(--color-phosphor) 60%, transparent)'
+
+  return (
+    <div className="mt-2 border border-phosphor-faint p-2">
+      <div className="mb-1.5 flex items-center justify-between font-mono text-[9px] tracking-widest uppercase">
+        <span className={unlocked > 0 ? 'text-glow text-phosphor' : 'text-phosphor-dim'}>
+          ◊ Dossier {unlocked}/{total}
+        </span>
+        <span className="text-phosphor-dim">
+          {nextThreshold !== null ? `${scanCount}/${nextThreshold} scans › tier ${unlocked + 1}` : `${scanCount} scans`}
+        </span>
+      </div>
+      <div className="relative h-8 px-1">
+        <div className="absolute top-2 right-0 left-0 h-2 border border-phosphor-faint bg-black/40" />
+        <div
+          className="absolute top-2 left-0 h-2 bg-phosphor transition-[width] duration-500"
+          style={{ width: `${progressPct}%`, boxShadow: glow }}
+        />
+        {thresholds.map((t, i) => {
+          const pct = Math.min(100, (t / maxThreshold) * 100)
+          const reached = i < unlocked
+          return (
+            <div
+              key={i}
+              className="absolute top-0 flex -translate-x-1/2 flex-col items-center"
+              style={{ left: `${pct}%` }}
+              title={`Tier ${i + 1} @ ${t} scans`}
+            >
+              <div
+                className={`mt-1.5 h-3 w-3 rotate-45 border ${reached ? 'border-phosphor bg-phosphor' : 'border-phosphor-dim bg-ink'}`}
+                style={reached ? { boxShadow: glow } : undefined}
+              />
+              <span
+                className={`mt-1 font-mono text-[8px] leading-none tracking-widest ${
+                  reached ? 'text-glow text-phosphor' : 'text-phosphor-dim'
+                }`}
+              >
+                {t}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function SpecimenSelect({
   monsters,
   onSelect,
@@ -125,6 +189,9 @@ function SpecimenSelect({
           {monsters.map((m) => {
             const displayName = isIdentified(m) ? m.name : m.code
             const showProgress = m.identifiedScansRequired > 0 && m.tierCount > 0
+            const thresholds = showProgress
+              ? Array.from({ length: m.tierCount }, (_, i) => tierThreshold(m.identifiedScansRequired, i))
+              : []
             const unlocked = showProgress ? unlockedTierCount(m.identifiedScansRequired, m.scanCount, m.tierCount) : 0
             return (
               <li key={m.monsterId}>
@@ -144,14 +211,7 @@ function SpecimenSelect({
                     )}
                   </div>
                   {showProgress && (
-                    <div className="mt-1.5 flex gap-0.5">
-                      {Array.from({ length: m.tierCount }, (_, i) => (
-                        <div
-                          key={i}
-                          className={`h-1 flex-1 ${i < unlocked ? 'bg-phosphor' : 'bg-phosphor-faint'}`}
-                        />
-                      ))}
-                    </div>
+                    <ScanTierBar scanCount={m.scanCount} thresholds={thresholds} unlocked={unlocked} total={m.tierCount} />
                   )}
                 </button>
               </li>
