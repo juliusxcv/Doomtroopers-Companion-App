@@ -258,21 +258,63 @@ function stripWikilinks(text) {
   return text.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, target, alias) => alias ?? target);
 }
 
-// "### Abilities:" section: a bullet list, "- **Name**: description" (the
-// description is optional — a bare "- Name" is kept with an empty one).
+// "### Abilities:" section. Two author styles both appear in real notes,
+// so both are supported:
+//   - "- **Name**: description" bullets (monster notes, ALB-XXIII) — one
+//     line per ability, description optional ("- Name" alone is kept with
+//     an empty one).
+//   - "**Name**" alone on its own line, with the description as one or
+//     more plain paragraph lines following it, up to the next "**Name**"
+//     header or bullet (character notes like Slabs/Isabella/Vexilia).
+// A note can mix both (e.g. Helbrecht: a "**Acts of Faith**" paragraph
+// intro followed by "- **N FP - Guidance**: ..." bullets) — each marker
+// line (bullet or bare header) starts a new ability; anything else is
+// appended to the current one's description.
 function parseAbilities(body) {
   const section = extractSection(body, 3, "Abilities");
   if (!section) return undefined;
-  const abilities = section
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter((l) => l.startsWith("-"))
-    .map((line) => {
-      const stripped = stripWikilinks(line.replace(/^-+\s*/, ""));
-      const m = stripped.match(/^\*\*(.+?)\*\*:?\s*(.*)$/);
-      return m ? { name: m[1].trim(), description: m[2].trim() } : { name: stripped, description: "" };
-    })
-    .filter((a) => a.name);
+
+  const abilities = [];
+  let current = null;
+  const flush = () => {
+    // A trailing colon can end up inside the bold markers depending on
+    // authoring style (e.g. "**Light 'Em Up:**") — strip it either way so
+    // the name doesn't carry stray punctuation.
+    if (current && current.name) {
+      abilities.push({ name: current.name.trim().replace(/:\s*$/, ""), description: current.description.trim() });
+    }
+    current = null;
+  };
+
+  for (const raw of section.split(/\r?\n/)) {
+    const line = stripWikilinks(raw.trim());
+    if (!line) continue;
+
+    const bulletMatch = line.match(/^-+\s*\*\*(.+?)\*\*:?\s*(.*)$/);
+    if (bulletMatch) {
+      flush();
+      current = { name: bulletMatch[1], description: bulletMatch[2] };
+      continue;
+    }
+
+    const headerMatch = line.match(/^\*\*(.+?)\*\*\s*$/);
+    if (headerMatch) {
+      flush();
+      current = { name: headerMatch[1], description: "" };
+      continue;
+    }
+
+    const bareBulletMatch = line.match(/^-+\s*(.+)$/);
+    if (bareBulletMatch) {
+      flush();
+      current = { name: bareBulletMatch[1], description: "" };
+      continue;
+    }
+
+    if (current) current.description = current.description ? `${current.description} ${line}` : line;
+  }
+  flush();
+
   return abilities.length > 0 ? abilities : undefined;
 }
 
