@@ -5,6 +5,7 @@ import type { Id } from '../convex/_generated/dataModel'
 import { Autopsy } from './components/Autopsy'
 import { Bestiary } from './components/Bestiary'
 import { Codex } from './components/Codex'
+import { Cogitator } from './components/Cogitator'
 import { Inventory } from './components/Inventory'
 import { PlayerProfile } from './components/PlayerProfile'
 
@@ -231,7 +232,7 @@ function JoinSessionForm({ onJoined }: { onJoined: (identity: Identity) => void 
   )
 }
 
-type Feature = 'menu' | 'autopsy' | 'inventory' | 'codex' | 'bestiary' | 'profile'
+type Feature = 'menu' | 'autopsy' | 'inventory' | 'codex' | 'bestiary' | 'profile' | 'cogitator'
 type Player = { _id: Id<'players'>; characterName: string; isGM: boolean }
 
 function SessionShell({ identity, onLeave }: { identity: Identity; onLeave: () => void }) {
@@ -296,7 +297,7 @@ function SessionShell({ identity, onLeave }: { identity: Identity; onLeave: () =
       {feature === 'menu' && <MainMenu onSelect={goToFeature} />}
       {feature === 'autopsy' && <Autopsy characterId={me.characterId} isGM={me.isGM} />}
       {feature === 'inventory' && <Inventory />}
-      {feature === 'codex' && <Codex isGM={me.isGM} focusSlug={codexTarget} />}
+      {feature === 'codex' && <Codex isGM={me.isGM} focusSlug={codexTarget} characterId={me.characterId} />}
       {feature === 'bestiary' && (
         <Bestiary
           onViewCodexEntry={(slug) => {
@@ -306,6 +307,7 @@ function SessionShell({ identity, onLeave }: { identity: Identity; onLeave: () =
         />
       )}
       {feature === 'profile' && <PlayerProfile characterId={me.characterId} />}
+      {feature === 'cogitator' && <Cogitator characterId={me.characterId} isGM={me.isGM} />}
 
       {profileOpen && (
         <ProfileModal
@@ -328,6 +330,7 @@ function MainMenu({ onSelect }: { onSelect: (feature: Feature) => void }) {
     { key: 'inventory', label: 'Inventory', glyph: '◈', description: 'Recovered relics, every operator.' },
     { key: 'codex', label: 'Codex', glyph: '⌘', description: 'Archive of unlocked lore.' },
     { key: 'bestiary', label: 'Stat Cards', glyph: '⚔', description: 'Combat reference for known specimens.' },
+    { key: 'cogitator', label: 'Cogitator Scanner', glyph: '▣', description: 'Capture the node lattice, earn points for the Mainframe.' },
   ]
 
   return (

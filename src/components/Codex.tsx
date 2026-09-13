@@ -2,7 +2,7 @@ import { useMutation, useQuery } from 'convex/react'
 import { useState } from 'react'
 import Markdown from 'react-markdown'
 import { api } from '../../convex/_generated/api'
-import type { Doc } from '../../convex/_generated/dataModel'
+import type { Doc, Id } from '../../convex/_generated/dataModel'
 
 // listForGM/listForPlayers add computed tier-progress fields not stored on
 // the document itself — see convex/codex.ts.
@@ -36,10 +36,19 @@ function buildTree(entries: CodexEntry[]): TreeNode {
 // at mount so a later click on "‹ Full Codex" can clear it without fighting
 // a prop that never changes on its own (Codex remounts fresh every time the
 // user navigates back into it, so there's no stale-focus risk).
-export function Codex({ isGM, focusSlug }: { isGM: boolean; focusSlug?: string | null }) {
+export function Codex({
+  isGM,
+  focusSlug,
+  characterId,
+}: {
+  isGM: boolean
+  focusSlug?: string | null
+  characterId: Id<'characters'>
+}) {
   const gmEntries = useQuery(api.codex.listForGM, isGM ? {} : 'skip')
   const playerEntries = useQuery(api.codex.listForPlayers, isGM ? 'skip' : {})
   const entries = isGM ? gmEntries : playerEntries
+  const balance = useQuery(api.cogitatorPoints.getBalance)
   const [focused, setFocused] = useState(focusSlug ?? null)
 
   if (entries === undefined) return null
@@ -56,7 +65,7 @@ export function Codex({ isGM, focusSlug }: { isGM: boolean; focusSlug?: string |
           ‹ Full Codex
         </button>
         <div className="panel p-2">
-          <EntryRow entry={focusedEntry} isGM={isGM} forceOpen />
+          <EntryRow entry={focusedEntry} isGM={isGM} characterId={characterId} forceOpen />
         </div>
       </div>
     )
@@ -66,12 +75,18 @@ export function Codex({ isGM, focusSlug }: { isGM: boolean; focusSlug?: string |
 
   return (
     <div className="space-y-2">
-      <h2 className="font-mono text-[11px] font-medium tracking-widest text-phosphor-dim uppercase">
-        ++ Codex Archive ++
-      </h2>
+      <div className="flex items-center justify-between">
+        <h2 className="font-mono text-[11px] font-medium tracking-widest text-phosphor-dim uppercase">
+          ++ Codex Archive ++
+        </h2>
+        <span className="font-mono text-[11px] tracking-widest text-bone-dim">
+          <span className="text-phosphor-dim">MAINFRAME POOL </span>
+          <span className="text-glow text-phosphor">{balance ?? '—'} PTS</span>
+        </span>
+      </div>
       <CodeRedeemer />
       <div className="panel p-2">
-        <TreeView node={tree} depth={0} isGM={isGM} />
+        <TreeView node={tree} depth={0} isGM={isGM} characterId={characterId} />
       </div>
     </div>
   )
@@ -123,7 +138,17 @@ function CodeRedeemer() {
   )
 }
 
-function TreeView({ node, depth, isGM }: { node: TreeNode; depth: number; isGM: boolean }) {
+function TreeView({
+  node,
+  depth,
+  isGM,
+  characterId,
+}: {
+  node: TreeNode
+  depth: number
+  isGM: boolean
+  characterId: Id<'characters'>
+}) {
   const folders = [...node.children.entries()].sort(([a], [b]) => a.localeCompare(b))
   const entries = [...node.entries].sort((a, b) => a.title.localeCompare(b.title))
 
@@ -134,20 +159,49 @@ function TreeView({ node, depth, isGM }: { node: TreeNode; depth: number; isGM: 
           <summary className="cursor-pointer py-1 font-mono text-xs font-medium tracking-widest text-phosphor-dim uppercase">
             {name}
           </summary>
-          <TreeView node={child} depth={depth + 1} isGM={isGM} />
+          <TreeView node={child} depth={depth + 1} isGM={isGM} characterId={characterId} />
         </details>
       ))}
       {entries.map((entry) => (
-        <EntryRow key={entry._id} entry={entry} isGM={isGM} />
+        <EntryRow key={entry._id} entry={entry} isGM={isGM} characterId={characterId} />
       ))}
     </div>
   )
 }
 
-function EntryRow({ entry, isGM, forceOpen }: { entry: CodexEntry; isGM: boolean; forceOpen?: boolean }) {
+function EntryRow({
+  entry,
+  isGM,
+  characterId,
+  forceOpen,
+}: {
+  entry: CodexEntry
+  isGM: boolean
+  characterId: Id<'characters'>
+  forceOpen?: boolean
+}) {
   const [open, setOpen] = useState(forceOpen ?? false)
   const setUnlocked = useMutation(api.codex.setUnlocked)
+  const spendAndUnlock = useMutation(api.cogitatorPoints.spendAndUnlockMainframe)
+  const balance = useQuery(api.cogitatorPoints.getBalance, entry.cost !== undefined && !isGM ? {} : 'skip')
+  const [spendError, setSpendError] = useState<string | null>(null)
+  const [spending, setSpending] = useState(false)
   const isTiered = entry.tiers !== undefined
+  // `cost` is set only on Mainframe notes by the sync script's own
+  // convention — a robust discriminator without checking categoryPath.
+  const isMainframe = entry.cost !== undefined && !isTiered
+
+  async function handleSpend() {
+    setSpending(true)
+    setSpendError(null)
+    try {
+      await spendAndUnlock({ characterId, entryId: entry._id })
+    } catch (err) {
+      setSpendError(err instanceof Error ? err.message : 'Unlock failed.')
+    } finally {
+      setSpending(false)
+    }
+  }
 
   return (
     <div className="py-1 text-sm">
@@ -165,18 +219,33 @@ function EntryRow({ entry, isGM, forceOpen }: { entry: CodexEntry; isGM: boolean
           <span className="shrink-0 font-mono text-[10px] tracking-widest text-phosphor-dim uppercase">
             {entry.unlockedTierCount}/{entry.tierCount} tiers
           </span>
+        ) : isGM ? (
+          <button
+            type="button"
+            onClick={() => setUnlocked({ entryId: entry._id, unlocked: !entry.unlocked })}
+            className="shrink-0 border border-phosphor-dim px-2 py-0.5 font-mono text-[10px] font-medium tracking-widest text-bone uppercase hover:border-phosphor"
+          >
+            {entry.unlocked ? 'Lock' : 'Unlock'}
+          </button>
         ) : (
-          isGM && (
+          isMainframe &&
+          !entry.unlocked && (
             <button
               type="button"
-              onClick={() => setUnlocked({ entryId: entry._id, unlocked: !entry.unlocked })}
-              className="shrink-0 border border-phosphor-dim px-2 py-0.5 font-mono text-[10px] font-medium tracking-widest text-bone uppercase hover:border-phosphor"
+              onClick={handleSpend}
+              disabled={spending || (balance ?? 0) < (entry.cost ?? 0)}
+              className={`shrink-0 border px-2 py-0.5 font-mono text-[10px] font-medium tracking-widest uppercase disabled:cursor-not-allowed ${
+                (balance ?? 0) < (entry.cost ?? 0)
+                  ? 'border-sanguine/60 text-sanguine'
+                  : 'border-phosphor-dim text-bone hover:border-phosphor'
+              }`}
             >
-              {entry.unlocked ? 'Lock' : 'Unlock'}
+              {spending ? 'Decrypting…' : `Unlock · ${entry.cost} pts`}
             </button>
           )
         )}
       </div>
+      {spendError && <p className="mt-1 font-mono text-[10px] tracking-widest text-sanguine">◊ {spendError}</p>}
 
       {open && (entry.unlocked || isGM) && (
         <div className="mt-1 panel-raised p-3">

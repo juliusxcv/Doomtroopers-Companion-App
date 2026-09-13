@@ -194,4 +194,24 @@ export default defineSchema({
   })
     .index("by_slug", ["slug"])
     .index("by_code", ["code"]),
+
+  // Shared party-wide Cogitator points pool — a Convex "singleton" (one row,
+  // fetched via .first()), campaign-wide like autopsyAttempts/resources but
+  // with no characterId to key on since the balance itself isn't per-player.
+  // Earned by clearing Cogitator Scanner stages (convex/cogitatorPoints.ts),
+  // spent to unlock Mainframe codex_entries (identified by `cost` being set).
+  cogitatorPoints: defineTable({
+    points: v.number(),
+    updatedAt: v.number(),
+  }),
+
+  // Audit trail for every change to the pool — every award and every spend
+  // gets a row, plus the historical carry-forward's seed. characterId is
+  // undefined for that system-seeded row.
+  cogitatorPointsLedger: defineTable({
+    delta: v.number(),
+    reason: v.string(),
+    characterId: v.optional(v.id("characters")),
+    createdAt: v.number(),
+  }),
 });

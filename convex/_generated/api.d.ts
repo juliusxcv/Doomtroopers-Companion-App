@@ -10,6 +10,7 @@
 
 import type * as characters from "../characters.js";
 import type * as codex from "../codex.js";
+import type * as cogitatorPoints from "../cogitatorPoints.js";
 import type * as inventory from "../inventory.js";
 import type * as monsters from "../monsters.js";
 import type * as resources from "../resources.js";
@@ -24,6 +25,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   characters: typeof characters;
   codex: typeof codex;
+  cogitatorPoints: typeof cogitatorPoints;
   inventory: typeof inventory;
   monsters: typeof monsters;
   resources: typeof resources;
