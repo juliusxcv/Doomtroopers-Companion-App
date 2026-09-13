@@ -87,6 +87,36 @@ export const importScanProgress = mutation({
   },
 });
 
+// One-time historical catch-up for the Operator Profile's "Autopsies
+// Completed" stat — see scripts/migrate-autopsy-attempts.mjs. The old app
+// never tracked autopsy attempts as their own event, so these are
+// reconstructed from the already-migrated inventory rows (grouped by
+// character + exact-matching createdAt, since a batch of items dropped at
+// the identical instant came from one resolved win) — a lower-bound
+// estimate, not an exact count, since a loss or a zero-drop win left no
+// trace in the old loot_log. Refuses to run if autopsyAttempts already has
+// rows, so a re-run can't double-count.
+export const importHistoricalAttempts = mutation({
+  args: {
+    attempts: v.array(
+      v.object({ characterId: v.id("characters"), monsterId: v.string(), createdAt: v.number() }),
+    ),
+  },
+  handler: async (ctx, { attempts }) => {
+    const existing = await ctx.db.query("autopsyAttempts").first();
+    if (existing) throw new Error("autopsyAttempts already has rows — refusing to re-import.");
+    for (const a of attempts) {
+      await ctx.db.insert("autopsyAttempts", {
+        characterId: a.characterId,
+        monsterId: a.monsterId,
+        won: true,
+        createdAt: a.createdAt,
+      });
+    }
+    return { imported: attempts.length };
+  },
+});
+
 function isIdentified(m: Doc<"monsters">): boolean {
   return m.identifiedScansRequired > 0 && m.scanCount >= m.identifiedScansRequired;
 }
