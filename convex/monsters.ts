@@ -11,7 +11,15 @@ const monsterContentFields = {
   organPool: v.array(v.string()),
   attemptsModifier: v.number(),
   identifiedScansRequired: v.number(),
-  lootTable: v.array(v.object({ item: v.string(), rarity: RARITY, dropChance: v.number() })),
+  lootTable: v.array(
+    v.object({
+      item: v.string(),
+      rarity: RARITY,
+      dropChance: v.number(),
+      scrapYield: v.number(),
+      componentsYield: v.number(),
+    }),
+  ),
   tierCount: v.number(),
   loadouts: v.optional(
     v.array(

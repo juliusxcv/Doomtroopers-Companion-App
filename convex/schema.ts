@@ -41,11 +41,12 @@ export default defineSchema({
   // Synced from the vault's Published/CODEX/Bestiary notes — see
   // scripts/sync-codex.mjs. `scanCount` is preserved across re-syncs just
   // like codex_entries.unlocked, since it's real progression, not authored
-  // content. `lootTable[].rarity`/`.dropChance` come from the GM-authored
-  // "Lootdrop Table.md" reference (per monster+item, since the same item
-  // can carry a different rarity/chance depending on which creature drops
-  // it), falling back to a historical-log guess or a flat default for
-  // anything not yet listed there.
+  // content. `lootTable[].rarity`/`.dropChance`/`.scrapYield`/
+  // `.componentsYield` come from the GM-authored "Lootdrop Table.md"
+  // reference (per monster+item, since the same item can carry a different
+  // rarity/chance/yield depending on which creature drops it), falling back
+  // to a historical-log guess (rarity only) or a flat default for anything
+  // not yet listed there.
   //
   // `loadouts`/`abilities` power the Monster Stat Card feature — a combat
   // quick-reference, separate from the Autopsy Report's lore tiers. Most
@@ -63,7 +64,15 @@ export default defineSchema({
     attemptsModifier: v.number(),
     identifiedScansRequired: v.number(),
     tierCount: v.number(),
-    lootTable: v.array(v.object({ item: v.string(), rarity: RARITY, dropChance: v.number() })),
+    lootTable: v.array(
+      v.object({
+        item: v.string(),
+        rarity: RARITY,
+        dropChance: v.number(),
+        scrapYield: v.number(),
+        componentsYield: v.number(),
+      }),
+    ),
     scanCount: v.number(),
     loadouts: v.optional(
       v.array(
@@ -89,6 +98,9 @@ export default defineSchema({
   // project memory project-lovable-app-reference and scripts/migrate-inventory.mjs.
   // `smelted` marks an item converted to crafting resources; it stays in the
   // log rather than being deleted, matching the old app's "restore" toggle.
+  // `smeltedScrap`/`smeltedComponents` capture exactly what was granted to
+  // `resources` at smelt time, so restoring (un-smelting) can reverse the
+  // same amount even if the monster's lootTable yield changes later.
   inventory: defineTable({
     characterId: v.id("characters"),
     itemName: v.string(),
@@ -96,7 +108,18 @@ export default defineSchema({
     source: v.string(),
     monsterId: v.optional(v.string()),
     smelted: v.boolean(),
+    smeltedScrap: v.optional(v.number()),
+    smeltedComponents: v.optional(v.number()),
     createdAt: v.number(),
+  }).index("by_character", ["characterId"]),
+
+  // Crafting-material stockpile, one row per character, credited by
+  // smelting items (see inventory.setSmelted) using each item's
+  // scrapYield/componentsYield from the monster it dropped from.
+  resources: defineTable({
+    characterId: v.id("characters"),
+    scrap: v.number(),
+    components: v.number(),
   }).index("by_character", ["characterId"]),
 
   // Synced from the vault's Published/ folder (see sync-codex script).

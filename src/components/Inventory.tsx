@@ -5,12 +5,15 @@ import { RARITIES, RARITY_BORDER, RARITY_GLYPH, RARITY_TEXT, type Rarity } from 
 
 export function Inventory() {
   const rows = useQuery(api.inventory.listAll)
+  const resources = useQuery(api.resources.listAll)
   const setSmelted = useMutation(api.inventory.setSmelted)
   const [rarityFilter, setRarityFilter] = useState<Rarity | null>(null)
   const [showSmelted, setShowSmelted] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
-  if (rows === undefined) return null
+  if (rows === undefined || resources === undefined) return null
+
+  const stockpiles = resources.filter((r) => r.scrap > 0 || r.components > 0)
 
   const smeltedCount = rows.filter((r) => r.smelted).length
   const baseRows = showSmelted ? rows : rows.filter((r) => !r.smelted)
@@ -47,6 +50,25 @@ export function Inventory() {
           )
         })}
       </div>
+
+      {stockpiles.length > 0 && (
+        <div className="panel p-2">
+          <div className="mb-1.5 font-mono text-[10px] tracking-widest text-phosphor-dim uppercase">
+            ◊ Smelted Stockpile
+          </div>
+          <ul className="space-y-1">
+            {stockpiles.map((r) => (
+              <li key={r._id} className="flex items-center justify-between font-mono text-xs">
+                <span className="truncate text-bone-dim">{r.characterName}</span>
+                <span className="shrink-0 text-bone">
+                  <span className="text-phosphor">{r.scrap}</span> scrap ·{' '}
+                  <span className="text-brass">{r.components}</span> components
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <button
         type="button"
@@ -98,7 +120,9 @@ export function Inventory() {
                       {row.smelted && (
                         <>
                           <dt className="text-phosphor-dim">Status</dt>
-                          <dd className="text-sanguine uppercase">Smelted for resources</dd>
+                          <dd className="text-sanguine uppercase">
+                            Smelted — {row.smeltedScrap ?? 0} scrap, {row.smeltedComponents ?? 0} components
+                          </dd>
                         </>
                       )}
                     </dl>

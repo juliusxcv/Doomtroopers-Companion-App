@@ -32,18 +32,25 @@ if (!fs.existsSync(publishedDir)) {
 
 const RARITIES = new Set(["scrap", "common", "uncommon", "rare", "legendary"]);
 
-// A "Monster ID | Item | Rarity | Drop %" reference table, authored by the
-// GM under Published/ (same "sync only reads Published/" rule as
-// everything else) — takes priority over the historical-log guess below.
-// Not synced as a codex entry itself; it's config, not player-facing
-// content.
+// A "Monster ID | Item | Rarity | Drop % | Scrap Yield | Components Yield"
+// reference table, authored by the GM under Published/ (same "sync only
+// reads Published/" rule as everything else) — takes priority over the
+// historical-log guess below. Not synced as a codex entry itself; it's
+// config, not player-facing content.
 //
 // Keyed per-monster, not just per-item: the same item can carry a
-// different rarity/chance depending on which creature drops it (e.g.
+// different rarity/chance/yield depending on which creature drops it (e.g.
 // "Spoiled MedStims" is uncommon from Undead Cadaver but rare from
 // Fleshspoil) — an earlier version of this table collapsed that into one
 // global rarity per item name, which was wrong for several real items.
 const RARITY_TABLE_FILENAME = "Lootdrop Table.md";
+
+// Blank/non-numeric Scrap or Components Yield cells mean "no yield", not
+// "unknown" — unlike Drop %, 0 is a legitimate, common real value here.
+function toYield(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
 
 function parseLootReferenceTable(content) {
   const lines = content
@@ -51,7 +58,7 @@ function parseLootReferenceTable(content) {
     .map((l) => l.trim())
     .filter((l) => l.startsWith("|"));
   const rows = parsePipeTable(lines);
-  const map = new Map(); // monsterId -> (lowercase item -> { rarity, dropChance })
+  const map = new Map(); // monsterId -> (lowercase item -> { rarity, dropChance, scrapYield, componentsYield })
   for (const row of rows) {
     const monsterId = (row["monster id"] ?? row.monster ?? "").trim();
     const item = (row.item ?? "").trim();
@@ -59,7 +66,12 @@ function parseLootReferenceTable(content) {
     const dropChance = Number(row["drop %"] ?? row["drop chance"]);
     if (!monsterId || !item || !RARITIES.has(rarity)) continue;
     if (!map.has(monsterId)) map.set(monsterId, new Map());
-    map.get(monsterId).set(item.toLowerCase(), { rarity, dropChance: Number.isFinite(dropChance) ? dropChance : undefined });
+    map.get(monsterId).set(item.toLowerCase(), {
+      rarity,
+      dropChance: Number.isFinite(dropChance) ? dropChance : undefined,
+      scrapYield: toYield(row["scrap yield"]),
+      componentsYield: toYield(row["components yield"]),
+    });
   }
   return map;
 }
@@ -359,6 +371,8 @@ for (const file of files) {
         item,
         rarity: rarity && RARITIES.has(rarity) ? rarity : "common",
         dropChance: dropChance ?? DEFAULT_DROP_CHANCE,
+        scrapYield: listed?.scrapYield ?? 0,
+        componentsYield: listed?.componentsYield ?? 0,
       };
     });
 
