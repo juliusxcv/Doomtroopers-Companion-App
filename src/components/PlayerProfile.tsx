@@ -1,7 +1,9 @@
 import { useQuery } from 'convex/react'
 import { api } from '../../convex/_generated/api'
-import type { Id } from '../../convex/_generated/dataModel'
+import type { Doc, Id } from '../../convex/_generated/dataModel'
 import { AbilitiesList, StatsAndWeapons } from './StatBlock'
+
+type Companion = NonNullable<Doc<'characters'>['companions']>[number]
 
 // Ported from the old app's player-avatars backup — static files, not
 // vault-sourced, same call as src/components/Autopsy.tsx's CREATURE_IMAGES
@@ -41,7 +43,8 @@ export function PlayerProfile({ characterId }: { characterId: Id<'characters'> }
   const portrait = PORTRAITS[profile.name]
   const hasWeapons = profile.weapons && (profile.weapons.ranged.length > 0 || profile.weapons.melee.length > 0)
   const hasAbilities = profile.abilities && profile.abilities.length > 0
-  const hasCard = profile.stats || hasWeapons || hasAbilities
+  const hasCompanions = profile.companions && profile.companions.length > 0
+  const hasCard = profile.stats || hasWeapons || hasAbilities || hasCompanions
 
   return (
     <div className="space-y-3">
@@ -88,11 +91,28 @@ export function PlayerProfile({ characterId }: { characterId: Id<'characters'> }
 
       {hasAbilities && <AbilitiesList abilities={profile.abilities!} />}
 
+      {hasCompanions && profile.companions!.map((c, i) => <CompanionCard key={i} companion={c} />)}
+
       {!hasCard && (
         <p className="panel py-6 text-center font-mono text-xs tracking-widest text-bone-dim uppercase">
           ◊ No stat data catalogued ◊
         </p>
       )}
+    </div>
+  )
+}
+
+function CompanionCard({ companion }: { companion: Companion }) {
+  const hasAbilities = companion.abilities && companion.abilities.length > 0
+  return (
+    <div className="space-y-2">
+      <div className="panel p-3">
+        <div className="mb-2 font-mono text-[11px] tracking-widest text-phosphor-dim uppercase">
+          ◊ Companion — {companion.name}
+        </div>
+        <StatsAndWeapons stats={companion.stats} weapons={companion.weapons} />
+      </div>
+      {hasAbilities && <AbilitiesList abilities={companion.abilities!} />}
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { STATS, WEAPON } from "./schema";
+import { ABILITY, COMPANION, STATS, WEAPONS } from "./schema";
 import { mutation, query } from "./_generated/server";
 
 export const list = query({
@@ -55,8 +55,9 @@ export const syncStats = mutation({
       v.object({
         name: v.string(),
         stats: v.optional(STATS),
-        weapons: v.optional(v.object({ ranged: v.array(WEAPON), melee: v.array(WEAPON) })),
-        abilities: v.optional(v.array(v.object({ name: v.string(), description: v.string() }))),
+        weapons: v.optional(WEAPONS),
+        abilities: v.optional(v.array(ABILITY)),
+        companions: v.optional(v.array(COMPANION)),
       }),
     ),
   },
@@ -72,7 +73,12 @@ export const syncStats = mutation({
         unmatched.push(c.name);
         continue;
       }
-      await ctx.db.patch(existing._id, { stats: c.stats, weapons: c.weapons, abilities: c.abilities });
+      await ctx.db.patch(existing._id, {
+        stats: c.stats,
+        weapons: c.weapons,
+        abilities: c.abilities,
+        companions: c.companions,
+      });
       updated++;
     }
     return { updated, unmatched };

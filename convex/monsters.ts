@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
-import { RARITY, STATS, WEAPON } from "./schema";
+import { ABILITY, RARITY, STATS, WEAPONS } from "./schema";
 import { mutation, query } from "./_generated/server";
 
 const monsterContentFields = {
@@ -26,11 +26,11 @@ const monsterContentFields = {
       v.object({
         name: v.string(),
         stats: STATS,
-        weapons: v.object({ ranged: v.array(WEAPON), melee: v.array(WEAPON) }),
+        weapons: WEAPONS,
       }),
     ),
   ),
-  abilities: v.optional(v.array(v.object({ name: v.string(), description: v.string() }))),
+  abilities: v.optional(v.array(ABILITY)),
 };
 
 // Called by scripts/sync-codex.mjs — the same public Bestiary note that

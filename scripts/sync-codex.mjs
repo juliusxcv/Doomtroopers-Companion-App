@@ -211,6 +211,30 @@ function tableToWeapons(rows, key) {
     .filter((w) => w.name && w.name !== "-");
 }
 
+// Parses a "stats row + optional Ranged/Melee weapon tables" chunk — the
+// content shared by a "### Stats:" loadout section and a companion's "#
+// Name" section (see parseLoadouts/parseCompanions below). Returns null if
+// the chunk has no recognizable stats table at all.
+function parseStatsAndWeapons(chunk) {
+  const [statsRows, ...weaponTables] = splitPipeTables(chunk);
+  const statsRow = statsRows?.[0];
+  if (!statsRow) return null;
+  const pick = (key) => (statsRow[key] ?? "").trim();
+  const stats = { rc: pick("rc"), cc: pick("cc"), ap: pick("ap"), mv: pick("mv"), def: pick("def"), hp: pick("hp") };
+  const inv = pick("inv");
+  if (inv) stats.inv = inv;
+
+  const ranged = [];
+  const melee = [];
+  for (const rows of weaponTables) {
+    const firstKey = Object.keys(rows[0] ?? {})[0];
+    if (firstKey === "ranged") ranged.push(...tableToWeapons(rows, "ranged"));
+    else if (firstKey === "melee") melee.push(...tableToWeapons(rows, "melee"));
+  }
+
+  return { stats, weapons: { ranged, melee } };
+}
+
 // One "### Stats[ <Loadout Name>]:" section and everything under it, up to
 // the next heading of any level. Real notes stack these back-to-back for
 // squad-type creatures with multiple loadouts (see Undead Mutant: Sergeant,
@@ -229,26 +253,36 @@ function parseLoadouts(body) {
     const nextHeadingIdx = chunk.search(/\n#{1,6}\s/);
     if (nextHeadingIdx !== -1) chunk = chunk.slice(0, nextHeadingIdx);
 
-    const [statsRows, ...weaponTables] = splitPipeTables(chunk);
-    const statsRow = statsRows?.[0];
-    if (!statsRow) return;
-    const pick = (key) => (statsRow[key] ?? "").trim();
-    const stats = { rc: pick("rc"), cc: pick("cc"), ap: pick("ap"), mv: pick("mv"), def: pick("def"), hp: pick("hp") };
-    const inv = pick("inv");
-    if (inv) stats.inv = inv;
-
-    const ranged = [];
-    const melee = [];
-    for (const rows of weaponTables) {
-      const firstKey = Object.keys(rows[0] ?? {})[0];
-      if (firstKey === "ranged") ranged.push(...tableToWeapons(rows, "ranged"));
-      else if (firstKey === "melee") melee.push(...tableToWeapons(rows, "melee"));
-    }
-
-    loadouts.push({ name, stats, weapons: { ranged, melee } });
+    const parsed = parseStatsAndWeapons(chunk);
+    if (parsed) loadouts.push({ name, ...parsed });
   });
 
   return loadouts.length > 0 ? loadouts : undefined;
+}
+
+// A companion/servitor unit belonging to a character note — a "# <Name>"
+// (H1) section containing its own bare stats table (no "### Stats:"
+// heading needed, unlike a loadout), optional weapon tables, and its own
+// "### Abilities:". Everything up to the next "# " heading or end of body
+// belongs to that companion, LVL/Stats/Abilities headings included, since
+// (unlike a loadout) a companion owns its whole section.
+function parseCompanions(body) {
+  const headingRe = /^#\s+(.+)$/gm;
+  const matches = [...body.matchAll(headingRe)];
+  if (matches.length === 0) return undefined;
+
+  const companions = [];
+  matches.forEach((m, i) => {
+    const name = m[1].trim();
+    const start = m.index + m[0].length;
+    const end = i + 1 < matches.length ? matches[i + 1].index : body.length;
+    const chunk = body.slice(start, end);
+
+    const parsed = parseStatsAndWeapons(chunk);
+    if (parsed) companions.push({ name, ...parsed, abilities: parseAbilities(chunk) });
+  });
+
+  return companions.length > 0 ? companions : undefined;
 }
 
 // Obsidian wikilinks (e.g. "[[Synaptic Node Core]]" or "[[target|alias]]")
@@ -375,6 +409,7 @@ for (const file of files) {
       stats: loadouts?.[0]?.stats,
       weapons: loadouts?.[0]?.weapons,
       abilities: parseAbilities(content),
+      companions: parseCompanions(content),
     });
     continue;
   }

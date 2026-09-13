@@ -28,6 +28,22 @@ export const STATS = v.object({
   inv: v.optional(v.string()),
 });
 
+export const WEAPONS = v.object({ ranged: v.array(WEAPON), melee: v.array(WEAPON) });
+export const ABILITY = v.object({ name: v.string(), description: v.string() });
+
+// A companion/servitor unit belonging to a character — its own full stat
+// card (same shape as the character's own), nested under the character
+// rather than being a roster entry itself. Parsed from a "# <Name>" section
+// in the character's note (see scripts/sync-codex.mjs:parseCompanions) —
+// distinct from a monster's "### Stats <Name>:" loadouts, which are
+// alternate builds of the same unit rather than a second unit entirely.
+export const COMPANION = v.object({
+  name: v.string(),
+  stats: STATS,
+  weapons: WEAPONS,
+  abilities: v.optional(v.array(ABILITY)),
+});
+
 export default defineSchema({
   sessions: defineTable({
     code: v.string(),
@@ -43,13 +59,16 @@ export default defineSchema({
   // scripts/sync-codex.mjs + characters.syncStats — same "### Stats:"/
   // "### Abilities:" convention as the Bestiary notes, just not wrapped in
   // named loadouts since a player character is always a single build.
+  // `companions` are a distinct unit belonging to the character (e.g.
+  // ALB-XXIII's B-III servitor) — see the COMPANION validator above.
   characters: defineTable({
     name: v.string(),
     playerRealName: v.optional(v.string()),
     isGM: v.boolean(),
     stats: v.optional(STATS),
-    weapons: v.optional(v.object({ ranged: v.array(WEAPON), melee: v.array(WEAPON) })),
-    abilities: v.optional(v.array(v.object({ name: v.string(), description: v.string() }))),
+    weapons: v.optional(WEAPONS),
+    abilities: v.optional(v.array(ABILITY)),
+    companions: v.optional(v.array(COMPANION)),
   }),
 
   players: defineTable({
@@ -101,11 +120,11 @@ export default defineSchema({
         v.object({
           name: v.string(),
           stats: STATS,
-          weapons: v.object({ ranged: v.array(WEAPON), melee: v.array(WEAPON) }),
+          weapons: WEAPONS,
         }),
       ),
     ),
-    abilities: v.optional(v.array(v.object({ name: v.string(), description: v.string() }))),
+    abilities: v.optional(v.array(ABILITY)),
   }).index("by_monster_id", ["monsterId"]),
 
   // Campaign-wide (not session-scoped) — items persist for a character across
