@@ -6,6 +6,7 @@ import { Autopsy } from './components/Autopsy'
 import { Bestiary } from './components/Bestiary'
 import { Codex } from './components/Codex'
 import { Inventory } from './components/Inventory'
+import { PlayerProfile } from './components/PlayerProfile'
 
 type Identity = { sessionId: Id<'sessions'>; playerId: Id<'players'> }
 
@@ -230,7 +231,7 @@ function JoinSessionForm({ onJoined }: { onJoined: (identity: Identity) => void 
   )
 }
 
-type Feature = 'menu' | 'autopsy' | 'inventory' | 'codex' | 'bestiary'
+type Feature = 'menu' | 'autopsy' | 'inventory' | 'codex' | 'bestiary' | 'profile'
 type Player = { _id: Id<'players'>; characterName: string; isGM: boolean }
 
 function SessionShell({ identity, onLeave }: { identity: Identity; onLeave: () => void }) {
@@ -288,6 +289,7 @@ function SessionShell({ identity, onLeave }: { identity: Identity; onLeave: () =
       {feature === 'inventory' && <Inventory />}
       {feature === 'codex' && <Codex isGM={me.isGM} />}
       {feature === 'bestiary' && <Bestiary />}
+      {feature === 'profile' && <PlayerProfile characterId={me.characterId} />}
 
       {profileOpen && (
         <ProfileModal
@@ -305,6 +307,7 @@ function SessionShell({ identity, onLeave }: { identity: Identity; onLeave: () =
 
 function MainMenu({ onSelect }: { onSelect: (feature: Feature) => void }) {
   const items: { key: Feature; label: string; glyph: string; description: string }[] = [
+    { key: 'profile', label: 'Operator Profile', glyph: '☉', description: 'Your dossier — portrait, stats, abilities.' },
     { key: 'autopsy', label: 'Autopsy', glyph: 'Ψ', description: 'Dissect specimens for loot and scan progress.' },
     { key: 'inventory', label: 'Inventory', glyph: '◈', description: 'Recovered relics, every operator.' },
     { key: 'codex', label: 'Codex', glyph: '⌘', description: 'Archive of unlocked lore.' },

@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
-import { RARITY, WEAPON } from "./schema";
+import { RARITY, STATS, WEAPON } from "./schema";
 import { mutation, query } from "./_generated/server";
 
 const monsterContentFields = {
@@ -25,14 +25,7 @@ const monsterContentFields = {
     v.array(
       v.object({
         name: v.string(),
-        stats: v.object({
-          rc: v.string(),
-          cc: v.string(),
-          ap: v.string(),
-          mv: v.string(),
-          def: v.string(),
-          hp: v.string(),
-        }),
+        stats: STATS,
         weapons: v.object({ ranged: v.array(WEAPON), melee: v.array(WEAPON) }),
       }),
     ),
@@ -164,8 +157,8 @@ export const submitResult = mutation({
       }
     }
 
-    // The GM's own character never logs real inventory, matching the old
-    // app's admin-account exclusion.
+    // The GM's own character never logs real inventory or campaign-stat
+    // progress, matching the old app's admin-account exclusion.
     if (!character.isGM) {
       for (const drop of drops) {
         await ctx.db.insert("inventory", {
@@ -178,6 +171,7 @@ export const submitResult = mutation({
           createdAt: Date.now(),
         });
       }
+      await ctx.db.insert("autopsyAttempts", { characterId, monsterId: monster.monsterId, won, createdAt: Date.now() });
     }
 
     return { drops, scanCount };

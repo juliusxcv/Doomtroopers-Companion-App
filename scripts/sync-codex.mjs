@@ -234,6 +234,8 @@ function parseLoadouts(body) {
     if (!statsRow) return;
     const pick = (key) => (statsRow[key] ?? "").trim();
     const stats = { rc: pick("rc"), cc: pick("cc"), ap: pick("ap"), mv: pick("mv"), def: pick("def"), hp: pick("hp") };
+    const inv = pick("inv");
+    if (inv) stats.inv = inv;
 
     const ranged = [];
     const melee = [];
@@ -304,6 +306,7 @@ const DEFAULT_DROP_CHANCE = 50;
 
 const entries = [];
 const monsters = [];
+const characters = [];
 const warnings = [];
 const slugSources = new Map();
 
@@ -317,6 +320,22 @@ for (const file of files) {
   const relDir = path.dirname(relPath);
   const categoryPath = relDir === "." ? [] : relDir.split(path.sep);
   const filename = path.basename(file, ".md");
+
+  // Player-character notes (Published/CODEX/Characters/) are a separate
+  // destination — Operator Profile stats/weapons/abilities, not Codex
+  // lore — so they never become a codex entry, same principle as the
+  // Lootdrop Table exclusion above.
+  const characterName = fm.character ? String(fm.character).trim() : undefined;
+  if (characterName) {
+    const loadouts = parseLoadouts(content);
+    characters.push({
+      name: characterName,
+      stats: loadouts?.[0]?.stats,
+      weapons: loadouts?.[0]?.weapons,
+      abilities: parseAbilities(content),
+    });
+    continue;
+  }
 
   // Prefer an explicit id/slug from frontmatter (stable across file moves)
   // and only fall back to a path-derived slug when the note has neither.
@@ -403,9 +422,16 @@ if (!convexUrl) {
 const client = new ConvexHttpClient(convexUrl);
 const result = await client.mutation(api.codex.sync, { entries });
 const monsterResult = await client.mutation(api.monsters.sync, { monsters });
+const characterResult = characters.length > 0 ? await client.mutation(api.characters.syncStats, { characters }) : null;
 
 console.log(`Synced ${entries.length} entries (${result.created} new, ${result.updated} updated).`);
 console.log(`Synced ${monsters.length} monsters (${monsterResult.created} new, ${monsterResult.updated} updated).`);
+if (characterResult) {
+  console.log(`Synced ${characters.length} character profiles (${characterResult.updated} updated).`);
+  for (const name of characterResult.unmatched) {
+    warnings.push(`Character "${name}" has no matching roster entry (check spelling against characters:list) — skipped.`);
+  }
+}
 
 if (result.stale.length > 0) {
   console.log(`\n${result.stale.length} entries in Convex no longer found in the vault (not deleted automatically):`);

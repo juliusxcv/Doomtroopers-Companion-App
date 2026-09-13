@@ -2,10 +2,9 @@ import { useQuery } from 'convex/react'
 import { useState } from 'react'
 import { api } from '../../convex/_generated/api'
 import type { Doc } from '../../convex/_generated/dataModel'
+import { AbilitiesList, StatsAndWeapons } from './StatBlock'
 
 type Monster = Doc<'monsters'>
-type Weapon = { name: string; atk: string; dmg: string; wr: string }
-type Loadout = NonNullable<Monster['loadouts']>[number]
 
 // Name and stat-card content (loadouts/abilities) are both gated behind
 // identification — the same LVL 1 Autopsy threshold — for both GM and
@@ -66,8 +65,6 @@ function BestiaryList({ monsters, onSelect }: { monsters: Monster[]; onSelect: (
   )
 }
 
-const STAT_KEYS = ['rc', 'cc', 'ap', 'mv', 'def', 'hp'] as const
-
 function StatCard({ monster, onExit }: { monster: Monster; onExit: () => void }) {
   const identified = isIdentified(monster)
   const displayName = identified ? monster.name : monster.code
@@ -96,7 +93,7 @@ function StatCard({ monster, onExit }: { monster: Monster; onExit: () => void })
               section per loadout instead, first one open by default. */}
           {loadouts.length === 1 && !loadouts[0].name ? (
             <div className="panel p-3">
-              <LoadoutBody loadout={loadouts[0]} />
+              <StatsAndWeapons stats={loadouts[0].stats} weapons={loadouts[0].weapons} />
             </div>
           ) : (
             loadouts.map((l, i) => (
@@ -105,25 +102,13 @@ function StatCard({ monster, onExit }: { monster: Monster; onExit: () => void })
                   {l.name || `Loadout ${i + 1}`}
                 </summary>
                 <div className="mt-2">
-                  <LoadoutBody loadout={l} />
+                  <StatsAndWeapons stats={l.stats} weapons={l.weapons} />
                 </div>
               </details>
             ))
           )}
 
-          {hasAbilities && (
-            <div className="panel space-y-2 p-3">
-              <div className="font-mono text-[11px] tracking-widest text-phosphor-dim uppercase">Abilities</div>
-              <ul className="space-y-1.5">
-                {monster.abilities!.map((a, i) => (
-                  <li key={i} className="font-body text-sm text-bone-dim">
-                    <span className="font-mono font-semibold text-phosphor">{a.name}</span>
-                    {a.description && <span> — {a.description}</span>}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+          {hasAbilities && <AbilitiesList abilities={monster.abilities!} />}
 
           {!hasCard && (
             <p className="panel py-6 text-center font-mono text-xs tracking-widest text-bone-dim uppercase">
@@ -140,56 +125,6 @@ function StatCard({ monster, onExit }: { monster: Monster; onExit: () => void })
       >
         ‹ Choose Another Specimen
       </button>
-    </div>
-  )
-}
-
-function LoadoutBody({ loadout }: { loadout: Loadout }) {
-  const hasWeapons = loadout.weapons.ranged.length > 0 || loadout.weapons.melee.length > 0
-  return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-6 gap-1 text-center">
-        {STAT_KEYS.map((k) => (
-          <div key={k}>
-            <div className="font-mono text-[9px] tracking-widest text-phosphor-dim uppercase">{k}</div>
-            <div className="text-glow font-display text-lg text-phosphor">{loadout.stats[k]}</div>
-          </div>
-        ))}
-      </div>
-      {hasWeapons && (
-        <div className="space-y-3">
-          {loadout.weapons.ranged.length > 0 && <WeaponTable label="Ranged" weapons={loadout.weapons.ranged} />}
-          {loadout.weapons.melee.length > 0 && <WeaponTable label="Melee" weapons={loadout.weapons.melee} />}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function WeaponTable({ label, weapons }: { label: string; weapons: Weapon[] }) {
-  return (
-    <div className="overflow-x-auto">
-      <div className="mb-1 font-mono text-[10px] tracking-widest text-bone-dim uppercase">{label}</div>
-      <table className="w-full font-mono text-xs">
-        <thead>
-          <tr className="text-[10px] tracking-widest text-phosphor-dim uppercase">
-            <th className="w-0 py-1 pr-3 text-left font-medium whitespace-nowrap">Weapon</th>
-            <th className="w-0 px-1.5 py-1 text-right font-medium">Atk</th>
-            <th className="w-0 px-1.5 py-1 text-right font-medium">Dmg</th>
-            <th className="py-1 pl-3 text-left font-medium">WR</th>
-          </tr>
-        </thead>
-        <tbody>
-          {weapons.map((w, i) => (
-            <tr key={i} className="border-t border-phosphor-faint align-top">
-              <td className="py-1 pr-3 whitespace-nowrap text-bone">{w.name}</td>
-              <td className="px-1.5 py-1 text-right text-phosphor">{w.atk}</td>
-              <td className="px-1.5 py-1 text-right text-phosphor">{w.dmg}</td>
-              <td className="py-1 pl-3 text-left text-bone-dim">{w.wr}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   )
 }

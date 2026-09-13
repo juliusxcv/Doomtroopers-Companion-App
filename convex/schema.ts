@@ -16,6 +16,18 @@ export const WEAPON = v.object({
   wr: v.string(),
 });
 
+// `inv` (Invulnerable save) is optional — most creatures/characters don't
+// have one; ALB-XXIII's Skitarii build is the first to carry it.
+export const STATS = v.object({
+  rc: v.string(),
+  cc: v.string(),
+  ap: v.string(),
+  mv: v.string(),
+  def: v.string(),
+  hp: v.string(),
+  inv: v.optional(v.string()),
+});
+
 export default defineSchema({
   sessions: defineTable({
     code: v.string(),
@@ -24,10 +36,20 @@ export default defineSchema({
 
   // The predefined campaign roster. Role (GM vs player) is derived from
   // isGM here, not stored per-session — one source of truth per character.
+  // `stats`/`weapons`/`abilities` power the player's own Operator Profile
+  // card — same shape as a single monster loadout. Synced from vault notes
+  // under Published/CODEX/Characters/ (a `character: "<exact name>"`
+  // frontmatter field links a note to its roster row) via
+  // scripts/sync-codex.mjs + characters.syncStats — same "### Stats:"/
+  // "### Abilities:" convention as the Bestiary notes, just not wrapped in
+  // named loadouts since a player character is always a single build.
   characters: defineTable({
     name: v.string(),
     playerRealName: v.optional(v.string()),
     isGM: v.boolean(),
+    stats: v.optional(STATS),
+    weapons: v.optional(v.object({ ranged: v.array(WEAPON), melee: v.array(WEAPON) })),
+    abilities: v.optional(v.array(v.object({ name: v.string(), description: v.string() }))),
   }),
 
   players: defineTable({
@@ -78,14 +100,7 @@ export default defineSchema({
       v.array(
         v.object({
           name: v.string(),
-          stats: v.object({
-            rc: v.string(),
-            cc: v.string(),
-            ap: v.string(),
-            mv: v.string(),
-            def: v.string(),
-            hp: v.string(),
-          }),
+          stats: STATS,
           weapons: v.object({ ranged: v.array(WEAPON), melee: v.array(WEAPON) }),
         }),
       ),
@@ -120,6 +135,17 @@ export default defineSchema({
     characterId: v.id("characters"),
     scrap: v.number(),
     components: v.number(),
+  }).index("by_character", ["characterId"]),
+
+  // One row per Autopsy attempt (win or loss), for the Operator Profile's
+  // "Autopsies Completed" campaign stat — see monsters.ts:submitResult.
+  // The GM's own character is excluded, matching the existing inventory
+  // exclusion (GM scans are test data, not real campaign progress).
+  autopsyAttempts: defineTable({
+    characterId: v.id("characters"),
+    monsterId: v.string(),
+    won: v.boolean(),
+    createdAt: v.number(),
   }).index("by_character", ["characterId"]),
 
   // Synced from the vault's Published/ folder (see sync-codex script).
