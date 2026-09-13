@@ -124,6 +124,22 @@ export const listForPlayers = query({
   },
 });
 
+// Finds the Codex entry linked to a monster (its Autopsy Report) — used by
+// the Bestiary's Stat Card to link back to the matching lore entry. Not
+// gated by unlock state: Codex.tsx already shows a "not yet unlocked"
+// message for a locked entry, which is informative on its own rather than
+// something to hide the link behind.
+export const findEntryByMonster = query({
+  args: { monsterId: v.string() },
+  handler: async (ctx, { monsterId }) => {
+    const entry = await ctx.db
+      .query("codex_entries")
+      .filter((q) => q.eq(q.field("monsterId"), monsterId))
+      .first();
+    return entry ? { slug: entry.slug, title: entry.title } : null;
+  },
+});
+
 export const setUnlocked = mutation({
   args: { entryId: v.id("codex_entries"), unlocked: v.boolean() },
   handler: async (ctx, { entryId, unlocked }) => {

@@ -31,12 +31,36 @@ function buildTree(entries: CodexEntry[]): TreeNode {
   return root
 }
 
-export function Codex({ isGM }: { isGM: boolean }) {
+// `focusSlug` jumps straight to one entry (e.g. a Stat Card's "View Autopsy
+// Report" link) instead of the full tree — captured into local state once
+// at mount so a later click on "‹ Full Codex" can clear it without fighting
+// a prop that never changes on its own (Codex remounts fresh every time the
+// user navigates back into it, so there's no stale-focus risk).
+export function Codex({ isGM, focusSlug }: { isGM: boolean; focusSlug?: string | null }) {
   const gmEntries = useQuery(api.codex.listForGM, isGM ? {} : 'skip')
   const playerEntries = useQuery(api.codex.listForPlayers, isGM ? 'skip' : {})
   const entries = isGM ? gmEntries : playerEntries
+  const [focused, setFocused] = useState(focusSlug ?? null)
 
   if (entries === undefined) return null
+
+  const focusedEntry = focused ? entries.find((e) => e.slug === focused) : undefined
+  if (focusedEntry) {
+    return (
+      <div className="space-y-2">
+        <button
+          type="button"
+          onClick={() => setFocused(null)}
+          className="border border-phosphor-dim px-2 py-1 font-mono text-[10px] font-medium tracking-widest text-bone uppercase hover:border-phosphor"
+        >
+          ‹ Full Codex
+        </button>
+        <div className="panel p-2">
+          <EntryRow entry={focusedEntry} isGM={isGM} forceOpen />
+        </div>
+      </div>
+    )
+  }
 
   const tree = buildTree(entries)
 
@@ -120,8 +144,8 @@ function TreeView({ node, depth, isGM }: { node: TreeNode; depth: number; isGM: 
   )
 }
 
-function EntryRow({ entry, isGM }: { entry: CodexEntry; isGM: boolean }) {
-  const [open, setOpen] = useState(false)
+function EntryRow({ entry, isGM, forceOpen }: { entry: CodexEntry; isGM: boolean; forceOpen?: boolean }) {
+  const [open, setOpen] = useState(forceOpen ?? false)
   const setUnlocked = useMutation(api.codex.setUnlocked)
   const isTiered = entry.tiers !== undefined
 

@@ -15,7 +15,7 @@ function isIdentified(m: Monster): boolean {
   return m.identifiedScansRequired > 0 && m.scanCount >= m.identifiedScansRequired
 }
 
-export function Bestiary() {
+export function Bestiary({ onViewCodexEntry }: { onViewCodexEntry?: (slug: string) => void }) {
   const monsters = useQuery(api.monsters.listAll)
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
@@ -26,7 +26,7 @@ export function Bestiary() {
   if (!selected) {
     return <BestiaryList monsters={monsters} onSelect={setSelectedId} />
   }
-  return <StatCard monster={selected} onExit={() => setSelectedId(null)} />
+  return <StatCard monster={selected} onExit={() => setSelectedId(null)} onViewCodexEntry={onViewCodexEntry} />
 }
 
 function BestiaryList({ monsters, onSelect }: { monsters: Monster[]; onSelect: (monsterId: string) => void }) {
@@ -65,7 +65,16 @@ function BestiaryList({ monsters, onSelect }: { monsters: Monster[]; onSelect: (
   )
 }
 
-function StatCard({ monster, onExit }: { monster: Monster; onExit: () => void }) {
+function StatCard({
+  monster,
+  onExit,
+  onViewCodexEntry,
+}: {
+  monster: Monster
+  onExit: () => void
+  onViewCodexEntry?: (slug: string) => void
+}) {
+  const codexEntry = useQuery(api.codex.findEntryByMonster, { monsterId: monster.monsterId })
   const identified = isIdentified(monster)
   const displayName = identified ? monster.name : monster.code
   const loadouts = monster.loadouts ?? []
@@ -80,6 +89,16 @@ function StatCard({ monster, onExit }: { monster: Monster; onExit: () => void })
       </div>
 
       {monster.blurb && <p className="text-center font-body text-sm text-bone-dim italic">"{monster.blurb}"</p>}
+
+      {codexEntry && onViewCodexEntry && (
+        <button
+          type="button"
+          onClick={() => onViewCodexEntry(codexEntry.slug)}
+          className="w-full border border-phosphor-dim py-1.5 font-mono text-[11px] font-medium tracking-widest text-bone-dim uppercase hover:border-phosphor hover:text-bone"
+        >
+          ◊ View Autopsy Report ›
+        </button>
+      )}
 
       {!identified ? (
         <p className="panel py-6 text-center font-mono text-xs tracking-widest text-bone-dim uppercase">

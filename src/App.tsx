@@ -238,6 +238,15 @@ function SessionShell({ identity, onLeave }: { identity: Identity; onLeave: () =
   const data = useQuery(api.sessions.get, { sessionId: identity.sessionId })
   const [feature, setFeature] = useState<Feature>('menu')
   const [profileOpen, setProfileOpen] = useState(false)
+  // Set only by a Stat Card's "View Autopsy Report" link, consumed once by
+  // Codex on mount — every other way of navigating (main menu, the header
+  // back button) clears it so a stale target can't resurface later.
+  const [codexTarget, setCodexTarget] = useState<string | null>(null)
+
+  function goToFeature(next: Feature) {
+    setCodexTarget(null)
+    setFeature(next)
+  }
 
   if (data === undefined) {
     return <p className="text-center font-mono text-xs text-bone-dim">Loading session…</p>
@@ -268,7 +277,7 @@ function SessionShell({ identity, onLeave }: { identity: Identity; onLeave: () =
         ) : (
           <button
             type="button"
-            onClick={() => setFeature('menu')}
+            onClick={() => goToFeature('menu')}
             className="border border-phosphor-dim px-2 py-1 font-mono text-[10px] font-medium tracking-widest text-bone uppercase hover:border-phosphor"
           >
             ‹ Main Menu
@@ -284,11 +293,18 @@ function SessionShell({ identity, onLeave }: { identity: Identity; onLeave: () =
         </button>
       </div>
 
-      {feature === 'menu' && <MainMenu onSelect={setFeature} />}
+      {feature === 'menu' && <MainMenu onSelect={goToFeature} />}
       {feature === 'autopsy' && <Autopsy characterId={me.characterId} isGM={me.isGM} />}
       {feature === 'inventory' && <Inventory />}
-      {feature === 'codex' && <Codex isGM={me.isGM} />}
-      {feature === 'bestiary' && <Bestiary />}
+      {feature === 'codex' && <Codex isGM={me.isGM} focusSlug={codexTarget} />}
+      {feature === 'bestiary' && (
+        <Bestiary
+          onViewCodexEntry={(slug) => {
+            setCodexTarget(slug)
+            setFeature('codex')
+          }}
+        />
+      )}
       {feature === 'profile' && <PlayerProfile characterId={me.characterId} />}
 
       {profileOpen && (
