@@ -560,6 +560,48 @@ export function CogitatorScanner({ difficulty, characterId, isGM, onExit, onRest
       bgCtx.stroke()
     }
 
+    // Faint starfield texture, baked in once alongside the rest of the
+    // static background — reads as backdrop clutter (like the star-point
+    // fields on in-universe cogitator star-map displays), never as a game
+    // element, so it stays low-alpha phosphor rather than a new hue. Each
+    // star gets a faint line to its nearest neighbor too — the same
+    // "connected nodes" idiom as the real lattice's edges, just much
+    // quieter, so the backdrop itself reads as a wider cogitator network.
+    const stars: { x: number; y: number }[] = []
+    for (let i = 0; i < 70; i++) {
+      const a = Math.random() * Math.PI * 2
+      const r = Math.sqrt(Math.random()) * FIELD_RADIUS
+      stars.push({ x: CENTER + Math.cos(a) * r, y: CENTER + Math.sin(a) * r })
+    }
+    bgCtx.strokeStyle = phosphor(0.1)
+    bgCtx.lineWidth = 0.5
+    for (let i = 0; i < stars.length; i++) {
+      let nearest = -1
+      let nearestD = Infinity
+      for (let j = 0; j < stars.length; j++) {
+        if (i === j) continue
+        const d = Math.hypot(stars[i].x - stars[j].x, stars[i].y - stars[j].y)
+        if (d < nearestD) {
+          nearestD = d
+          nearest = j
+        }
+      }
+      if (nearest !== -1 && nearestD < 70) {
+        bgCtx.beginPath()
+        bgCtx.moveTo(stars[i].x, stars[i].y)
+        bgCtx.lineTo(stars[nearest].x, stars[nearest].y)
+        bgCtx.stroke()
+      }
+    }
+    bgCtx.fillStyle = phosphor(1)
+    for (const s of stars) {
+      bgCtx.globalAlpha = 0.1 + Math.random() * 0.25
+      bgCtx.beginPath()
+      bgCtx.arc(s.x, s.y, Math.random() < 0.15 ? 1.3 : 0.7, 0, Math.PI * 2)
+      bgCtx.fill()
+    }
+    bgCtx.globalAlpha = 1
+
     // -------- Pre-rendered node sprites (replaces per-frame shadowBlur) --------
     // shadowBlur forces an offscreen rasterization per shape per frame and is
     // the single biggest cost as node count grows. We bake each variant once
@@ -959,6 +1001,27 @@ export function CogitatorScanner({ difficulty, characterId, isGM, onExit, onRest
         const sprite = sprites[n.side][variant]
         ctx.drawImage(sprite, n.x - SPRITE_HALF, n.y - SPRITE_HALF, SPRITE_SIZE, SPRITE_SIZE)
 
+        // Command/HQ marker — a soft, slowly-breathing glow behind each
+        // side's origin node (echoing the highlighted home-system marker on
+        // in-universe star-map displays), NOT a stroked ring — a ring reads
+        // as a shield/buff here since that's exactly what Fortify's shield
+        // ring already means. Cosmetic only; at most 2 nodes per lattice
+        // carry it, so a fresh radial gradient per frame is cheap.
+        if (n.origin === 'command') {
+          const glowColor = isGreen ? phosphor : sanguine
+          const pulse = 0.5 + 0.5 * Math.sin(ts / 1400)
+          const glowR = NODE_RADIUS + 16 + pulse * 8
+          const grad = ctx.createRadialGradient(n.x, n.y, NODE_RADIUS, n.x, n.y, glowR)
+          grad.addColorStop(0, glowColor(0.14 + pulse * 0.05))
+          grad.addColorStop(1, glowColor(0))
+          ctx.save()
+          ctx.fillStyle = grad
+          ctx.beginPath()
+          ctx.arc(n.x, n.y, glowR, 0, Math.PI * 2)
+          ctx.fill()
+          ctx.restore()
+        }
+
         // HP ring — full circle = max HP, depletes as the node takes hits.
         if (n.hp < NODE_MAX_HP) {
           const hpFrac = n.hp / NODE_MAX_HP
@@ -1249,7 +1312,10 @@ export function CogitatorScanner({ difficulty, characterId, isGM, onExit, onRest
 
       {/* Stage title */}
       <div className="-mt-1 flex w-full max-w-[480px] items-baseline justify-between px-1">
-        <div className="text-[10px] uppercase tracking-[0.3em] text-phosphor-dim">node lattice</div>
+        <div className="border border-phosphor-faint px-2 py-1 leading-tight">
+          <div className="font-mono text-[8px] tracking-[0.3em] text-phosphor-dim/70 uppercase">Module</div>
+          <div className="font-mono text-[10px] tracking-[0.25em] text-phosphor uppercase">Node Lattice</div>
+        </div>
         <div className="flex items-baseline gap-2">
           <span className="text-glow font-display text-3xl leading-none text-phosphor">{String(stage).padStart(2, '0')}</span>
           <span className="text-[10px] uppercase tracking-widest text-phosphor-dim">
@@ -1258,60 +1324,66 @@ export function CogitatorScanner({ difficulty, characterId, isGM, onExit, onRest
         </div>
       </div>
 
-      {/* Scope */}
-      <div className="relative">
+      {/* Scope — the circular clip lives on its own inner wrapper around just
+          the canvas now, not the whole box, so the corner HUD readouts below
+          (positioned against this square outer wrapper) land in the box's
+          actual corners instead of the circle cutting them off. */}
+      <div className="hud-corners relative" style={{ width: SIZE, height: SIZE }}>
         <div
-          className="relative"
+          className="absolute inset-0"
           style={{
-            width: SIZE,
-            height: SIZE,
             borderRadius: '50%',
             overflow: 'hidden',
             border: '1px solid var(--color-phosphor-dim)',
           }}
         >
           <canvas ref={canvasRef} onPointerDown={handleScopeTap} className="block cursor-crosshair touch-none" />
-
-          {/* HUD */}
-          <div className="absolute top-3 left-4 z-20 text-[11px] tracking-wider text-phosphor-dim">t={formatTime(elapsed)}</div>
-          <div className="absolute top-3 right-4 z-20 text-[11px] tracking-wider text-phosphor-dim">ctrl {percentGreen}%</div>
-
-          <div className="absolute bottom-3 left-4 z-20 text-[11px] tracking-wider">
-            <span className="text-phosphor-dim">stage </span>
-            <span className="text-glow text-phosphor">{String(stage).padStart(2, '0')}</span>
-          </div>
-          <div className="absolute bottom-3 right-4 z-20 text-[11px] tracking-wider">
-            <span className="text-phosphor-dim">nodes </span>
-            <span className="text-phosphor">{worldRef.current.nodes.length}</span>
-          </div>
-
-          {stageBanner && (
-            <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center">
-              <div
-                className={`font-display animate-tier-unlock text-2xl tracking-widest ${failed ? 'text-sanguine' : 'text-glow text-phosphor'}`}
-                style={failed ? { textShadow: '0 0 18px color-mix(in oklab, var(--color-sanguine) 90%, transparent)' } : undefined}
-              >
-                {stageBanner}
-              </div>
-            </div>
-          )}
-
-          {failed && (
-            <div className="pointer-events-auto absolute inset-x-0 bottom-3 z-30 flex items-center justify-center">
-              <button
-                type="button"
-                onClick={() => {
-                  if (stage === 1) initStage(1)
-                  else setStage(1)
-                }}
-                className="border border-sanguine/70 bg-ink/60 px-4 py-1.5 text-[11px] uppercase tracking-[0.25em] text-sanguine transition-colors hover:border-sanguine"
-                style={{ textShadow: '0 0 8px color-mix(in oklab, var(--color-sanguine) 70%, transparent)' }}
-              >
-                ++ retry from lattice 01 ++
-              </button>
-            </div>
-          )}
         </div>
+
+        {/* HUD — bracketed coordinate-readout boxes, same idiom as an
+            in-universe star-map's CORD./AUTODECOUNT chips. */}
+        <div className="absolute top-3 left-4 z-20 border border-phosphor-faint bg-ink/70 px-2 py-1 font-mono text-[10px] tracking-wider text-phosphor-dim">
+          t={formatTime(elapsed)}
+        </div>
+        <div className="absolute top-3 right-4 z-20 border border-phosphor-faint bg-ink/70 px-2 py-1 font-mono text-[10px] tracking-wider text-phosphor-dim">
+          ctrl {percentGreen}%
+        </div>
+
+        <div className="absolute bottom-3 left-4 z-20 border border-phosphor-faint bg-ink/70 px-2 py-1 font-mono text-[10px] tracking-wider">
+          <span className="text-phosphor-dim">stage </span>
+          <span className="text-glow text-phosphor">{String(stage).padStart(2, '0')}</span>
+        </div>
+        <div className="absolute bottom-3 right-4 z-20 border border-phosphor-faint bg-ink/70 px-2 py-1 font-mono text-[10px] tracking-wider">
+          <span className="text-phosphor-dim">nodes </span>
+          <span className="text-phosphor">{worldRef.current.nodes.length}</span>
+        </div>
+
+        {stageBanner && (
+          <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center">
+            <div
+              className={`font-display animate-tier-unlock text-2xl tracking-widest ${failed ? 'text-sanguine' : 'text-glow text-phosphor'}`}
+              style={failed ? { textShadow: '0 0 18px color-mix(in oklab, var(--color-sanguine) 90%, transparent)' } : undefined}
+            >
+              {stageBanner}
+            </div>
+          </div>
+        )}
+
+        {failed && (
+          <div className="pointer-events-auto absolute inset-x-0 bottom-3 z-30 flex items-center justify-center">
+            <button
+              type="button"
+              onClick={() => {
+                if (stage === 1) initStage(1)
+                else setStage(1)
+              }}
+              className="border border-sanguine/70 bg-ink/60 px-4 py-1.5 text-[11px] uppercase tracking-[0.25em] text-sanguine transition-colors hover:border-sanguine"
+              style={{ textShadow: '0 0 8px color-mix(in oklab, var(--color-sanguine) 70%, transparent)' }}
+            >
+              ++ retry from lattice 01 ++
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Resource & upgrade HUD — placed outside the scope for legibility */}
