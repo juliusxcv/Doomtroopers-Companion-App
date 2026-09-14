@@ -13,27 +13,58 @@
 // `npm run sync:live`, the one-command version of this for GMing a session:
 // no arguments needed, always production, never ambiguous about which
 // deployment just got written to.
+//
+// The vault lives at a different absolute path on every machine this runs
+// from (GM's home PC, a laptop brought to the table, ...), so it's never
+// hardcoded — resolved in order from: an explicit CLI argument, the
+// DOOMTROOPERS_VAULT_PATH env var, a ".vault-path.local" file in this repo's
+// root (one line, gitignored via the existing "*.local" rule — create this
+// once per machine and never think about it again), falling back to
+// whatever path this repo happened to be authored on as a last resort.
 
 import { ConvexHttpClient } from "convex/browser";
 import matter from "gray-matter";
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { api } from "../convex/_generated/api.js";
 
-process.loadEnvFile(".env.local");
+// Missing on a machine that's only ever used for `--prod` syncing (never
+// `npx convex dev` locally) — --prod doesn't need anything from it, so a
+// missing file shouldn't be fatal.
+try {
+  process.loadEnvFile(".env.local");
+} catch {
+  // fine — see above.
+}
 
 // Deployment URLs aren't secrets — they're already embedded in the public
 // frontend bundle Vite ships to every player's browser.
 const PROD_CONVEX_URL = "https://outstanding-blackbird-385.convex.cloud";
-const DEFAULT_VAULT_PATH = "C:\\Users\\juliu\\Documents\\Doomtroopers\\DT-Lore-Vault-main";
+const FALLBACK_VAULT_PATH = "C:\\Users\\juliu\\Documents\\Doomtroopers\\DT-Lore-Vault-main";
+
+const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const vaultPathFile = path.join(repoRoot, ".vault-path.local");
+
+function resolveVaultPath(cliArg) {
+  if (cliArg) return cliArg;
+  if (process.env.DOOMTROOPERS_VAULT_PATH) return process.env.DOOMTROOPERS_VAULT_PATH;
+  if (fs.existsSync(vaultPathFile)) {
+    const fromFile = fs.readFileSync(vaultPathFile, "utf8").trim();
+    if (fromFile) return fromFile;
+  }
+  return FALLBACK_VAULT_PATH;
+}
 
 const args = process.argv.slice(2);
 const useProd = args.includes("--prod");
 const positional = args.filter((a) => a !== "--prod");
 
-const vaultPath = positional[0] ?? DEFAULT_VAULT_PATH;
+const vaultPath = resolveVaultPath(positional[0]);
 const backupDir =
   positional[1] ?? "C:\\Users\\juliu\\Documents\\Doomtroopers\\supabase-backup-20260808-120832";
+
+console.log(`Vault: ${vaultPath}`);
 
 console.log(
   useProd
@@ -44,6 +75,11 @@ console.log(
 const publishedDir = path.join(vaultPath, "Published");
 if (!fs.existsSync(publishedDir)) {
   console.error(`No "Published" folder found at ${publishedDir}`);
+  console.error(
+    `\nWrong vault path for this machine? Create "${vaultPathFile}" with the correct\n` +
+      `path on its own line (one-time, gitignored, safe to differ per machine), or set\n` +
+      `the DOOMTROOPERS_VAULT_PATH environment variable.`,
+  );
   process.exit(1);
 }
 
