@@ -9,6 +9,7 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "sync:codex": "node scripts/sync-codex.mjs",
+    "sync:live": "node scripts/sync-codex.mjs --prod",
     "migrate:inventory": "node scripts/migrate-inventory.mjs",
     "migrate:scan-progress": "node scripts/migrate-scan-progress.mjs"
   },

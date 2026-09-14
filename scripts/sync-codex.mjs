@@ -6,7 +6,13 @@
 // disk — the companion app itself never needs local vault access, only
 // Convex.
 //
-// Usage: node scripts/sync-codex.mjs "<path-to-vault>" ["<path-to-supabase-backup-folder>"]
+// Usage: node scripts/sync-codex.mjs [--prod] ["<path-to-vault>"] ["<path-to-supabase-backup-folder>"]
+//
+// --prod targets the live production deployment instead of whatever
+// VITE_CONVEX_URL resolves to locally (the dev deployment) — see
+// `npm run sync:live`, the one-command version of this for GMing a session:
+// no arguments needed, always production, never ambiguous about which
+// deployment just got written to.
 
 import { ConvexHttpClient } from "convex/browser";
 import matter from "gray-matter";
@@ -16,13 +22,24 @@ import { api } from "../convex/_generated/api.js";
 
 process.loadEnvFile(".env.local");
 
-const vaultPath = process.argv[2];
+// Deployment URLs aren't secrets — they're already embedded in the public
+// frontend bundle Vite ships to every player's browser.
+const PROD_CONVEX_URL = "https://outstanding-blackbird-385.convex.cloud";
+const DEFAULT_VAULT_PATH = "C:\\Users\\juliu\\Documents\\Doomtroopers\\DT-Lore-Vault-main";
+
+const args = process.argv.slice(2);
+const useProd = args.includes("--prod");
+const positional = args.filter((a) => a !== "--prod");
+
+const vaultPath = positional[0] ?? DEFAULT_VAULT_PATH;
 const backupDir =
-  process.argv[3] ?? "C:\\Users\\juliu\\Documents\\Doomtroopers\\supabase-backup-20260808-120832";
-if (!vaultPath) {
-  console.error('Usage: node scripts/sync-codex.mjs <path-to-vault> ["<path-to-supabase-backup-folder>"]');
-  process.exit(1);
-}
+  positional[1] ?? "C:\\Users\\juliu\\Documents\\Doomtroopers\\supabase-backup-20260808-120832";
+
+console.log(
+  useProd
+    ? "Target: PRODUCTION (outstanding-blackbird-385) — this is the live site.\n"
+    : `Target: dev (${process.env.CONVEX_DEPLOYMENT ?? "VITE_CONVEX_URL from .env.local"}).\n`,
+);
 
 const publishedDir = path.join(vaultPath, "Published");
 if (!fs.existsSync(publishedDir)) {
@@ -496,7 +513,7 @@ for (const file of files) {
   }
 }
 
-const convexUrl = process.env.VITE_CONVEX_URL;
+const convexUrl = useProd ? PROD_CONVEX_URL : process.env.VITE_CONVEX_URL;
 if (!convexUrl) {
   console.error("VITE_CONVEX_URL not found in .env.local — is `npx convex dev` running?");
   process.exit(1);
