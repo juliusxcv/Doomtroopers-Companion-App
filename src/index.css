@@ -77,6 +77,30 @@ body::before {
     background: var(--color-panel-raised);
     border: 1px solid var(--color-phosphor-dim);
   }
+
+  /* Cogitator-HUD corner brackets — four small L-shaped ticks layered on
+     top of a panel via background-image (no extra DOM nodes), echoing the
+     targeting-reticle corner marks on in-universe terminal screens. Brass,
+     not phosphor, so it reads as chrome/framing rather than live data. */
+  .hud-corners {
+    position: relative;
+  }
+  .hud-corners::before {
+    content: '';
+    position: absolute;
+    inset: 3px;
+    pointer-events: none;
+    background:
+      linear-gradient(var(--color-brass), var(--color-brass)) top left / 9px 1.5px no-repeat,
+      linear-gradient(var(--color-brass), var(--color-brass)) top left / 1.5px 9px no-repeat,
+      linear-gradient(var(--color-brass), var(--color-brass)) top right / 9px 1.5px no-repeat,
+      linear-gradient(var(--color-brass), var(--color-brass)) top right / 1.5px 9px no-repeat,
+      linear-gradient(var(--color-brass), var(--color-brass)) bottom left / 9px 1.5px no-repeat,
+      linear-gradient(var(--color-brass), var(--color-brass)) bottom left / 1.5px 9px no-repeat,
+      linear-gradient(var(--color-brass), var(--color-brass)) bottom right / 9px 1.5px no-repeat,
+      linear-gradient(var(--color-brass), var(--color-brass)) bottom right / 1.5px 9px no-repeat;
+    opacity: 0.75;
+  }
 }
 
 /* ============================================================

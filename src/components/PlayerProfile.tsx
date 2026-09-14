@@ -1,8 +1,10 @@
-import { useQuery } from 'convex/react'
+import { useMutation, useQuery } from 'convex/react'
 import { useState } from 'react'
 import Markdown from 'react-markdown'
 import { api } from '../../convex/_generated/api'
 import type { Doc, Id } from '../../convex/_generated/dataModel'
+import { RARITIES, RARITY_BORDER, RARITY_GLYPH, RARITY_TEXT, type Rarity } from '../lib/rarity'
+import { initials, PORTRAITS } from '../lib/portraits'
 import { AbilitiesList, StatsAndWeapons } from './StatBlock'
 import { TabBar } from './TabBar'
 import { VideoLink } from './VideoLink'
@@ -16,30 +18,7 @@ type Profile = Doc<'characters'> & {
   components: number
 }
 type Companion = NonNullable<Doc<'characters'>['companions']>[number]
-type SubTab = 'stats' | 'abilities' | 'lore'
-
-// Ported from the old app's player-avatars backup — static files, not
-// vault-sourced, same call as src/components/Autopsy.tsx's CREATURE_IMAGES
-// (binary assets stay out of the vault-sync pipeline). Keyed by exact
-// roster name; a character with no portrait on file falls back to initials,
-// matching the old app's own fallback behavior.
-const PORTRAITS: Record<string, string> = {
-  'Vexilia Thornkell': '/characters/vex.jpg',
-  'Helbrecht Nullis': '/characters/nullis.jpg',
-  'Isabella Alderidge': '/characters/isabella.jpg',
-  'Gideon Rook': '/characters/gideon_rook.jpg',
-  'ALB-XXIII': '/characters/albxxiii.jpg',
-  Slabs: '/characters/slabs.jpg',
-}
-
-function initials(name: string): string {
-  const words = name.split(/[\s-]+/).filter(Boolean)
-  return words
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join('')
-    .toUpperCase()
-}
+type SubTab = 'stats' | 'abilities' | 'inventory' | 'lore'
 
 // A roster-wide list rather than a single card — the logged-in operator's
 // own dossier opens by default (per the user's own request: least clicks
@@ -105,6 +84,7 @@ function CharacterCard({ profile, isMe }: { profile: Profile; isMe: boolean }) {
             [
               { key: 'stats', label: 'Stats' },
               { key: 'abilities', label: 'Abilities' },
+              { key: 'inventory', label: 'Inventory' },
               { key: 'lore', label: 'Lore' },
             ] as const
           }
@@ -114,6 +94,7 @@ function CharacterCard({ profile, isMe }: { profile: Profile; isMe: boolean }) {
 
         {tab === 'stats' && <StatsTab profile={profile} />}
         {tab === 'abilities' && <AbilitiesTab profile={profile} />}
+        {tab === 'inventory' && <InventoryTab profile={profile} />}
         {tab === 'lore' && <LoreTab profile={profile} />}
       </div>
     </details>
@@ -192,6 +173,122 @@ function AbilitiesTab({ profile }: { profile: Profile }) {
           <AbilitiesList abilities={c.abilities} />
         </div>
       ))}
+    </div>
+  )
+}
+
+// Scoped down from the old app-wide Reliquary Manifest (now retired — see
+// Inventory.tsx's removal) to just this operator's own recovered items.
+// Resource totals (scrap/components) already surface on the Stats tab, so
+// no separate stockpile summary is repeated here.
+function InventoryTab({ profile }: { profile: Profile }) {
+  const rows = useQuery(api.inventory.listAll)
+  const setSmelted = useMutation(api.inventory.setSmelted)
+  const [rarityFilter, setRarityFilter] = useState<Rarity | null>(null)
+  const [showSmelted, setShowSmelted] = useState(false)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  if (rows === undefined) return null
+
+  const myRows = rows.filter((r) => r.characterId === profile._id)
+  const smeltedCount = myRows.filter((r) => r.smelted).length
+  const baseRows = showSmelted ? myRows : myRows.filter((r) => !r.smelted)
+  const tally = baseRows.reduce<Record<string, number>>((acc, r) => {
+    acc[r.rarity] = (acc[r.rarity] ?? 0) + 1
+    return acc
+  }, {})
+  const visibleRows = rarityFilter ? baseRows.filter((r) => r.rarity === rarityFilter) : baseRows
+
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-5 gap-1">
+        {RARITIES.map((r) => {
+          const active = rarityFilter === r
+          return (
+            <button
+              key={r}
+              type="button"
+              onClick={() => setRarityFilter(active ? null : r)}
+              className={`border py-1.5 text-center transition-opacity ${RARITY_BORDER[r]} ${RARITY_TEXT[r]} ${
+                active ? 'bg-panel-raised' : rarityFilter ? 'opacity-40' : ''
+              }`}
+            >
+              <div className="font-mono text-[8px] tracking-widest uppercase opacity-80">{r}</div>
+              <div className="font-display text-lg leading-none">{tally[r] ?? 0}</div>
+            </button>
+          )
+        })}
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setShowSmelted((v) => !v)}
+        className={`w-full border py-1.5 font-mono text-[11px] font-medium tracking-widest uppercase transition-colors ${
+          showSmelted ? 'border-sanguine text-sanguine' : 'border-phosphor-dim text-bone-dim'
+        }`}
+      >
+        {showSmelted ? `Hide Smelted (${smeltedCount})` : `Show Smelted (${smeltedCount})`}
+      </button>
+
+      {visibleRows.length === 0 ? (
+        <p className="panel py-6 text-center font-mono text-xs tracking-widest text-bone-dim uppercase">
+          No relics recorded
+        </p>
+      ) : (
+        <ul className="space-y-1">
+          {visibleRows.map((row) => {
+            const isExpanded = expandedId === row._id
+            const borderClass = row.smelted ? 'border-sanguine' : RARITY_BORDER[row.rarity]
+            const textClass = row.smelted ? 'text-sanguine' : RARITY_TEXT[row.rarity]
+            return (
+              <li key={row._id}>
+                <button
+                  type="button"
+                  onClick={() => setExpandedId(isExpanded ? null : row._id)}
+                  className={`flex w-full items-center gap-2 border px-2 py-1.5 text-left ${borderClass}`}
+                >
+                  <span className={`w-4 text-center text-base leading-none ${textClass}`}>
+                    {RARITY_GLYPH[row.rarity]}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className={`truncate font-mono text-sm ${textClass}`}>{row.itemName}</div>
+                    <div className="truncate font-mono text-[10px] tracking-wide text-bone-dim">{row.source}</div>
+                  </div>
+                </button>
+
+                {isExpanded && (
+                  <div className={`border border-t-0 bg-panel-raised px-3 py-3 text-sm ${borderClass}`}>
+                    <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 font-mono text-xs">
+                      <dt className="text-phosphor-dim">Rarity</dt>
+                      <dd className={`uppercase ${textClass}`}>{row.rarity}</dd>
+                      <dt className="text-phosphor-dim">Source</dt>
+                      <dd className="text-bone">{row.source}</dd>
+                      {row.smelted && (
+                        <>
+                          <dt className="text-phosphor-dim">Status</dt>
+                          <dd className="text-sanguine uppercase">
+                            Smelted — {row.smeltedScrap ?? 0} scrap, {row.smeltedComponents ?? 0} components
+                          </dd>
+                        </>
+                      )}
+                    </dl>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setSmelted({ inventoryId: row._id, smelted: !row.smelted })
+                      }}
+                      className="mt-3 w-full border border-phosphor-dim py-1.5 font-mono text-xs font-medium tracking-widest text-bone uppercase hover:border-phosphor"
+                    >
+                      {row.smelted ? 'Restore Item' : 'Smelt Item'}
+                    </button>
+                  </div>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      )}
     </div>
   )
 }

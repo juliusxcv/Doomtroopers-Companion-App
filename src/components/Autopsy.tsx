@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../convex/_generated/api'
 import type { Doc, Id } from '../../convex/_generated/dataModel'
 import { RARITY_TEXT, type Rarity } from '../lib/rarity'
+import { AbilitiesList, StatsAndWeapons } from './StatBlock'
 
 type Monster = Doc<'monsters'>
 
@@ -83,7 +84,15 @@ function evaluateGuess(guess: string[], solution: string[]): SlotFeedback[] {
   return fb
 }
 
-export function Autopsy({ characterId, isGM }: { characterId: Id<'characters'>; isGM: boolean }) {
+export function Autopsy({
+  characterId,
+  isGM,
+  onViewCodexEntry,
+}: {
+  characterId: Id<'characters'>
+  isGM: boolean
+  onViewCodexEntry?: (slug: string) => void
+}) {
   const monsters = useQuery(api.monsters.listAll)
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
@@ -100,6 +109,7 @@ export function Autopsy({ characterId, isGM }: { characterId: Id<'characters'>; 
       characterId={characterId}
       isGM={isGM}
       onExit={() => setSelectedId(null)}
+      onViewCodexEntry={onViewCodexEntry}
     />
   )
 }
@@ -215,6 +225,133 @@ function SpecimenSelect({
   )
 }
 
+// The specimen photo doubles as the entry point for its Stat Card (ported
+// from the old standalone Bestiary tile, now retired — every specimen is
+// reachable here since selecting one for an autopsy already means picking
+// it from the full monster list). Most monsters have no recovered photo
+// (see CREATURE_IMAGES), so the tap target is always present as either the
+// real image or a placeholder "viewport" — the toggle affordance shouldn't
+// depend on whether art happens to exist.
+function MonsterVisual({
+  monster,
+  onViewCodexEntry,
+}: {
+  monster: Monster
+  onViewCodexEntry?: (slug: string) => void
+}) {
+  const [showStats, setShowStats] = useState(false)
+  const image = CREATURE_IMAGES[monster.monsterId]
+
+  return (
+    <div className="panel relative aspect-square overflow-hidden">
+      {showStats ? (
+        <div
+          className="absolute inset-0 overflow-y-auto bg-ink/95 p-3"
+          onClick={() => setShowStats(false)}
+        >
+          <div onClick={(e) => e.stopPropagation()}>
+            <MonsterStatCard
+              monster={monster}
+              onViewCodexEntry={onViewCodexEntry}
+              onClose={() => setShowStats(false)}
+            />
+          </div>
+        </div>
+      ) : (
+        <button type="button" onClick={() => setShowStats(true)} className="block h-full w-full">
+          {image ? (
+            <img
+              src={image}
+              alt={`Autopsy table — ${monster.name}`}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-panel-raised">
+              <span className="text-glow font-display text-4xl text-phosphor-dim">◉</span>
+              <span className="font-mono text-[10px] tracking-widest text-phosphor-dim uppercase">
+                No visual data
+              </span>
+            </div>
+          )}
+          <span className="absolute right-2 bottom-2 border border-phosphor-dim bg-ink/80 px-2 py-1 font-mono text-[9px] tracking-widest text-phosphor-dim uppercase">
+            Tap for stat card
+          </span>
+        </button>
+      )}
+    </div>
+  )
+}
+
+function MonsterStatCard({
+  monster,
+  onViewCodexEntry,
+  onClose,
+}: {
+  monster: Monster
+  onViewCodexEntry?: (slug: string) => void
+  onClose: () => void
+}) {
+  const codexEntry = useQuery(api.codex.findEntryByMonster, { monsterId: monster.monsterId })
+  const identified = isIdentified(monster)
+  const loadouts = monster.loadouts ?? []
+  const hasAbilities = monster.abilities && monster.abilities.length > 0
+  const hasCard = loadouts.length > 0 || hasAbilities
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="font-mono text-[10px] tracking-[0.3em] text-phosphor-dim uppercase">◊ Stat Card ◊</span>
+        <button type="button" onClick={onClose} className="font-mono text-sm text-bone-dim hover:text-bone">
+          ✕
+        </button>
+      </div>
+
+      {!identified ? (
+        <p className="panel-raised py-6 text-center font-mono text-xs tracking-widest text-bone-dim uppercase">
+          ◊ Not yet identified — needs more successful scans ◊
+        </p>
+      ) : (
+        <>
+          {loadouts.length === 1 && !loadouts[0].name ? (
+            <div className="panel-raised p-3">
+              <StatsAndWeapons stats={loadouts[0].stats} weapons={loadouts[0].weapons} />
+            </div>
+          ) : (
+            loadouts.map((l, i) => (
+              <details key={i} className="panel-raised p-3" open={i === 0}>
+                <summary className="cursor-pointer font-mono text-[11px] font-medium tracking-widest text-phosphor-dim uppercase">
+                  {l.name || `Loadout ${i + 1}`}
+                </summary>
+                <div className="mt-2">
+                  <StatsAndWeapons stats={l.stats} weapons={l.weapons} />
+                </div>
+              </details>
+            ))
+          )}
+
+          {hasAbilities && <AbilitiesList abilities={monster.abilities!} />}
+
+          {!hasCard && (
+            <p className="panel-raised py-6 text-center font-mono text-xs tracking-widest text-bone-dim uppercase">
+              ◊ No stat data catalogued ◊
+            </p>
+          )}
+
+          {codexEntry && onViewCodexEntry && (
+            <button
+              type="button"
+              onClick={() => onViewCodexEntry(codexEntry.slug)}
+              className="w-full border border-phosphor-dim py-1.5 font-mono text-[11px] font-medium tracking-widest text-bone-dim uppercase hover:border-phosphor hover:text-bone"
+            >
+              ◊ View Autopsy Report ›
+            </button>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 type Phase = 'playing' | 'progress' | 'won' | 'lost'
 
 type ProgressAnim = {
@@ -237,11 +374,13 @@ function AutopsySession({
   characterId,
   isGM,
   onExit,
+  onViewCodexEntry,
 }: {
   monster: Monster
   characterId: Id<'characters'>
   isGM: boolean
   onExit: () => void
+  onViewCodexEntry?: (slug: string) => void
 }) {
   const submitResult = useMutation(api.monsters.submitResult)
   const palette = monster.organPool
@@ -384,15 +523,7 @@ function AutopsySession({
         {isIdentified(monster) ? monster.name : monster.code}
       </p>
 
-      {CREATURE_IMAGES[monster.monsterId] && (
-        <div className="panel overflow-hidden">
-          <img
-            src={CREATURE_IMAGES[monster.monsterId]}
-            alt={`Autopsy table — ${monster.name}`}
-            className="aspect-square w-full object-cover"
-          />
-        </div>
-      )}
+      <MonsterVisual monster={monster} onViewCodexEntry={onViewCodexEntry} />
 
       {monster.blurb && <p className="font-body text-sm text-bone-dim italic">"{monster.blurb}"</p>}
 

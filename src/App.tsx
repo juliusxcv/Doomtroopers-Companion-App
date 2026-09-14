@@ -3,14 +3,13 @@ import { useState } from 'react'
 import { api } from '../convex/_generated/api'
 import type { Id } from '../convex/_generated/dataModel'
 import { Autopsy } from './components/Autopsy'
-import { Bestiary } from './components/Bestiary'
 import { Codex } from './components/Codex'
 import { Cogitator } from './components/Cogitator'
-import { Inventory } from './components/Inventory'
 import { PlayerProfile } from './components/PlayerProfile'
 import { StyleGuide } from './components/StyleGuide'
 import { TabBar } from './components/TabBar'
 import { VideoLink } from './components/VideoLink'
+import { initials, PORTRAITS } from './lib/portraits'
 
 // The campaign's pre-launch teaser trailer (from the Webflow teaser site),
 // shown behind a click on the Lobby splash — see HeroSplash.
@@ -247,7 +246,7 @@ function JoinSessionForm({ onJoined }: { onJoined: (identity: Identity) => void 
   )
 }
 
-type Feature = 'menu' | 'autopsy' | 'inventory' | 'codex' | 'bestiary' | 'profile' | 'cogitator'
+type Feature = 'menu' | 'autopsy' | 'codex' | 'profile' | 'cogitator'
 type Player = { _id: Id<'players'>; characterName: string; isGM: boolean }
 
 function SessionShell({ identity, onLeave }: { identity: Identity; onLeave: () => void }) {
@@ -285,7 +284,7 @@ function SessionShell({ identity, onLeave }: { identity: Identity; onLeave: () =
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         {feature === 'menu' ? (
           <span className="font-mono text-[10px] tracking-[0.3em] text-phosphor-dim uppercase">
             ++ Main Menu ++
@@ -299,28 +298,35 @@ function SessionShell({ identity, onLeave }: { identity: Identity; onLeave: () =
             ‹ Main Menu
           </button>
         )}
-        <button
-          type="button"
-          onClick={() => setProfileOpen(true)}
-          className="border border-phosphor-dim px-2 py-1 font-mono text-[10px] font-medium tracking-widest text-bone uppercase hover:border-phosphor"
-        >
-          {me.isGM && <span className="mr-1 text-brass">GM</span>}
-          Session
-        </button>
+        <div className="flex items-center gap-2">
+          <OperatorAvatarButton
+            name={me.characterName}
+            active={feature === 'profile'}
+            onClick={() => goToFeature('profile')}
+          />
+          <button
+            type="button"
+            onClick={() => setProfileOpen(true)}
+            className="border border-phosphor-dim px-2 py-1 font-mono text-[10px] font-medium tracking-widest text-bone uppercase hover:border-phosphor"
+          >
+            {me.isGM && <span className="mr-1 text-brass">GM</span>}
+            Session
+          </button>
+        </div>
       </div>
 
       {feature === 'menu' && <MainMenu onSelect={goToFeature} />}
-      {feature === 'autopsy' && <Autopsy characterId={me.characterId} isGM={me.isGM} />}
-      {feature === 'inventory' && <Inventory />}
-      {feature === 'codex' && <Codex isGM={me.isGM} focusSlug={codexTarget} characterId={me.characterId} />}
-      {feature === 'bestiary' && (
-        <Bestiary
+      {feature === 'autopsy' && (
+        <Autopsy
+          characterId={me.characterId}
+          isGM={me.isGM}
           onViewCodexEntry={(slug) => {
             setCodexTarget(slug)
             setFeature('codex')
           }}
         />
       )}
+      {feature === 'codex' && <Codex isGM={me.isGM} focusSlug={codexTarget} characterId={me.characterId} />}
       {feature === 'profile' && <PlayerProfile characterId={me.characterId} />}
       {feature === 'cogitator' && <Cogitator characterId={me.characterId} isGM={me.isGM} />}
 
@@ -338,34 +344,103 @@ function SessionShell({ identity, onLeave }: { identity: Identity; onLeave: () =
   )
 }
 
+// Weighted deliberately, not a flat list of equally-sized rows: Autopsy and
+// the Cogitator Scanner are the two things a player needs to find fastest
+// each session, so they get matching oversized "primary objective" tiles up
+// top. Codex is secondary reference material, one tier down. Operator,
+// Inventory, and Stat Cards used to live here too, but each had a more
+// natural home elsewhere — see OperatorAvatarButton (header), PlayerProfile
+// (Inventory tab), and Autopsy's MonsterVisual (Stat Card on the specimen
+// photo) — so the main menu itself only routes to things worth a dedicated
+// screen of their own.
 function MainMenu({ onSelect }: { onSelect: (feature: Feature) => void }) {
-  const items: { key: Feature; label: string; glyph: string; description: string }[] = [
-    { key: 'profile', label: 'Operator Profile', glyph: '☉', description: 'Your dossier — portrait, stats, abilities.' },
-    { key: 'autopsy', label: 'Autopsy', glyph: 'Ψ', description: 'Dissect specimens for loot and scan progress.' },
-    { key: 'inventory', label: 'Inventory', glyph: '◈', description: 'Recovered relics, every operator.' },
-    { key: 'codex', label: 'Codex', glyph: '⌘', description: 'Archive of unlocked lore.' },
-    { key: 'bestiary', label: 'Stat Cards', glyph: '⚔', description: 'Combat reference for known specimens.' },
-    { key: 'cogitator', label: 'Cogitator Scanner', glyph: '▣', description: 'Capture the node lattice, earn points for the Mainframe.' },
-  ]
-
   return (
-    <div className="space-y-2">
-      {items.map((item) => (
-        <button
-          key={item.key}
-          type="button"
-          onClick={() => onSelect(item.key)}
-          className="panel flex w-full items-center gap-4 px-4 py-4 text-left transition-colors hover:border-phosphor"
-        >
-          <span className="text-glow font-display text-3xl text-phosphor">{item.glyph}</span>
-          <span className="flex-1">
-            <span className="text-glow block font-display text-xl text-phosphor">{item.label}</span>
-            <span className="block font-mono text-xs text-bone-dim">{item.description}</span>
-          </span>
-          <span className="font-mono text-phosphor-dim">›</span>
-        </button>
-      ))}
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        <PrimaryModuleTile
+          glyph="Ψ"
+          label="Autopsy"
+          sublabel="Dissect Specimens"
+          onClick={() => onSelect('autopsy')}
+        />
+        <PrimaryModuleTile
+          glyph="▣"
+          label="Scanner"
+          sublabel="Cogitator Uplink"
+          onClick={() => onSelect('cogitator')}
+        />
+      </div>
+
+      <button
+        type="button"
+        onClick={() => onSelect('codex')}
+        className="hud-corners panel flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:border-phosphor"
+      >
+        <span className="text-glow font-display text-2xl text-brass">⌘</span>
+        <span className="flex-1">
+          <span className="block font-mono text-sm font-medium tracking-widest text-bone uppercase">Codex</span>
+          <span className="block font-mono text-[11px] text-bone-dim">Archive of unlocked lore.</span>
+        </span>
+        <span className="font-mono text-phosphor-dim">›</span>
+      </button>
     </div>
+  )
+}
+
+function PrimaryModuleTile({
+  glyph,
+  label,
+  sublabel,
+  onClick,
+}: {
+  glyph: string
+  label: string
+  sublabel: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="hud-corners panel-raised flex aspect-[4/5] flex-col items-center justify-center gap-2 px-2 py-4 text-center transition-colors hover:border-phosphor"
+    >
+      <span className="text-glow font-display text-5xl text-phosphor">{glyph}</span>
+      <span className="text-glow font-display text-lg tracking-wide text-phosphor uppercase">{label}</span>
+      <span className="font-mono text-[9px] tracking-[0.2em] text-phosphor-dim uppercase">{sublabel}</span>
+    </button>
+  )
+}
+
+// Stands in for the main menu's old "Operator Profile" row — a persistent
+// header button, since it's the one screen (your own dossier) worth
+// reaching from anywhere, not just the menu.
+function OperatorAvatarButton({
+  name,
+  active,
+  onClick,
+}: {
+  name: string
+  active: boolean
+  onClick: () => void
+}) {
+  const portrait = PORTRAITS[name]
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="Operator Profile"
+      className={`h-7 w-7 shrink-0 overflow-hidden border transition-colors ${
+        active ? 'border-phosphor' : 'border-phosphor-dim hover:border-phosphor'
+      }`}
+    >
+      {portrait ? (
+        <img src={portrait} alt="" className="h-full w-full object-cover" />
+      ) : (
+        <span className="flex h-full w-full items-center justify-center bg-panel-raised font-mono text-[9px] text-phosphor-dim">
+          {initials(name)}
+        </span>
+      )}
+    </button>
   )
 }
 
