@@ -207,6 +207,34 @@ export default defineSchema({
     .index("by_slug", ["slug"])
     .index("by_code", ["code"]),
 
+  // Vexilia's Peril gauge — campaign-wide per character (not session-scoped),
+  // same "persists across sessions" model as resources/autopsyAttempts, since
+  // several Peril consequences (e.g. "-1 Peril", "further increasing the
+  // peril gauge") narratively raise or lower this ongoing corruption level
+  // rather than resetting it each game. `level` is the number of d6 the
+  // psyker currently rolls on a Peril check (1-8, one per source table
+  // column — see src/lib/perils.ts). One row per character, created lazily
+  // on first read/write by convex/perils.ts.
+  perilGauge: defineTable({
+    characterId: v.id("characters"),
+    level: v.number(),
+    updatedAt: v.number(),
+  }).index("by_character", ["characterId"]),
+
+  // Append-only log of resolved Peril checks, for the in-app "recent perils"
+  // trail. Only the raw dice are stored server-side — which named Peril
+  // that total maps to is resolved client-side from the static table in
+  // src/lib/perils.ts (see that file's header comment for why the mapping
+  // needs no separate lookup data), so this table doesn't duplicate that
+  // content.
+  perilRolls: defineTable({
+    characterId: v.id("characters"),
+    level: v.number(),
+    dice: v.array(v.number()),
+    total: v.number(),
+    createdAt: v.number(),
+  }).index("by_character", ["characterId"]),
+
   // Shared party-wide Cogitator points pool — a Convex "singleton" (one row,
   // fetched via .first()), campaign-wide like autopsyAttempts/resources but
   // with no characterId to key on since the balance itself isn't per-player.

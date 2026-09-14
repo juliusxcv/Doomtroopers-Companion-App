@@ -13,6 +13,7 @@ import type * as codex from "../codex.js";
 import type * as cogitatorPoints from "../cogitatorPoints.js";
 import type * as inventory from "../inventory.js";
 import type * as monsters from "../monsters.js";
+import type * as perils from "../perils.js";
 import type * as resources from "../resources.js";
 import type * as sessions from "../sessions.js";
 
@@ -28,6 +29,7 @@ declare const fullApi: ApiFromModules<{
   cogitatorPoints: typeof cogitatorPoints;
   inventory: typeof inventory;
   monsters: typeof monsters;
+  perils: typeof perils;
   resources: typeof resources;
   sessions: typeof sessions;
 }>;

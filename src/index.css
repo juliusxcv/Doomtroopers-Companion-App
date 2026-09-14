@@ -185,6 +185,207 @@ body::before {
 }
 
 /* ============================================================
+   Peril Check — Vexilia's warp-dice roller. A deliberately different
+   accent (violet "warp" rather than the terminal's phosphor green) scoped
+   entirely to .peril-scene, so the rest of the one-committed-dark-theme
+   cogitator UI is untouched — this screen is meant to feel like a glimpse
+   of something the cogitator doesn't normally show.
+   ============================================================ */
+.peril-scene {
+  --warp: oklch(0.68 0.19 306);
+  --warp-dim: oklch(0.48 0.14 306);
+  --warp-faint: oklch(0.3 0.08 306);
+  position: relative;
+}
+
+.peril-panel {
+  background: color-mix(in oklab, var(--warp-faint) 22%, var(--color-panel));
+  border: 1px solid var(--warp-dim);
+}
+
+.peril-warp-text {
+  color: var(--warp);
+}
+.peril-warp-text-dim {
+  color: var(--warp-dim);
+}
+.peril-warp-glow {
+  color: var(--warp);
+  text-shadow:
+    0 0 5px color-mix(in oklab, var(--warp) 75%, transparent),
+    0 0 16px color-mix(in oklab, var(--warp) 45%, transparent);
+}
+
+.peril-level-btn {
+  border: 1px solid var(--warp-faint);
+  padding: 0.35rem 0;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--color-bone-dim);
+  background: transparent;
+  transition:
+    color 150ms,
+    border-color 150ms,
+    background-color 150ms;
+}
+.peril-level-btn:hover:not(:disabled) {
+  border-color: var(--warp);
+  color: var(--color-bone);
+}
+.peril-level-btn.is-active {
+  border-color: var(--warp);
+  background: color-mix(in oklab, var(--warp) 18%, transparent);
+  color: var(--warp);
+  text-shadow: 0 0 6px color-mix(in oklab, var(--warp) 60%, transparent);
+}
+.peril-level-btn:disabled {
+  opacity: 0.5;
+}
+
+.peril-die {
+  display: flex;
+  height: 2.75rem;
+  width: 2.75rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--warp-dim);
+  background: color-mix(in oklab, var(--warp-faint) 35%, var(--color-ink));
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  color: var(--color-bone);
+  transform: rotate(-45deg);
+}
+.peril-die > span {
+  transform: rotate(45deg);
+}
+.peril-die.is-rolling {
+  animation: peril-die-tumble 160ms linear infinite;
+  border-color: var(--warp);
+  color: var(--warp);
+}
+.peril-die.is-final {
+  animation: peril-die-settle 500ms ease-out;
+  border-color: var(--warp);
+  color: var(--warp);
+  box-shadow: 0 0 10px color-mix(in oklab, var(--warp) 55%, transparent);
+}
+
+@keyframes peril-die-tumble {
+  0% {
+    transform: rotate(-45deg) scale(1);
+  }
+  25% {
+    transform: rotate(-58deg) scale(1.08);
+  }
+  50% {
+    transform: rotate(-33deg) scale(0.94);
+  }
+  75% {
+    transform: rotate(-52deg) scale(1.05);
+  }
+  100% {
+    transform: rotate(-45deg) scale(1);
+  }
+}
+
+@keyframes peril-die-settle {
+  0% {
+    transform: rotate(-45deg) scale(1.35);
+    box-shadow: 0 0 22px color-mix(in oklab, var(--warp) 85%, transparent);
+  }
+  100% {
+    transform: rotate(-45deg) scale(1);
+    box-shadow: 0 0 10px color-mix(in oklab, var(--warp) 55%, transparent);
+  }
+}
+
+.peril-total-glow {
+  color: var(--warp);
+  text-shadow:
+    0 0 6px color-mix(in oklab, var(--warp) 80%, transparent),
+    0 0 22px color-mix(in oklab, var(--warp) 50%, transparent);
+}
+
+.peril-roll-btn {
+  border: 1px solid var(--warp);
+  background: color-mix(in oklab, var(--warp) 16%, transparent);
+  color: var(--warp);
+  padding: 0.5rem 0;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  text-shadow: 0 0 6px color-mix(in oklab, var(--warp) 55%, transparent);
+  transition: background-color 150ms;
+}
+.peril-roll-btn:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--warp) 28%, transparent);
+}
+.peril-roll-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.peril-reveal {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--warp);
+  background: color-mix(in oklab, var(--warp-faint) 30%, var(--color-panel-raised));
+}
+
+@keyframes peril-reveal-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.9) translateY(6px);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.03) translateY(0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+.peril-reveal-in {
+  animation: peril-reveal-in 450ms ease-out;
+}
+
+@keyframes peril-reveal-shine {
+  0% {
+    transform: translateX(-160%) skewX(-20deg);
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  88% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(260%) skewX(-20deg);
+    opacity: 0;
+  }
+}
+.peril-reveal::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 35%;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    color-mix(in oklab, var(--warp) 65%, transparent) 50%,
+    transparent 100%
+  );
+  animation: peril-reveal-shine 2.8s cubic-bezier(0.6, 0.04, 0.4, 0.96) infinite;
+  animation-delay: 0.4s;
+  pointer-events: none;
+}
+
+/* ============================================================
    Codex prose — long-form lore is read in a serif built for
    paragraphs, not the mono terminal font used for UI chrome.
    Phosphor glow is reserved for headings, not body copy, since
