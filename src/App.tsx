@@ -8,6 +8,7 @@ import { Codex } from './components/Codex'
 import { Cogitator } from './components/Cogitator'
 import { Inventory } from './components/Inventory'
 import { PlayerProfile } from './components/PlayerProfile'
+import { StyleGuide } from './components/StyleGuide'
 
 type Identity = { sessionId: Id<'sessions'>; playerId: Id<'players'> }
 
@@ -42,6 +43,18 @@ export default function App() {
   function handleLeave() {
     saveIdentity(null)
     setIdentity(null)
+  }
+
+  // Dev/design reference, not a player-facing feature — reached directly by
+  // URL (#styleguide), bypassing the join flow entirely, so it needs no
+  // routing library or hosting rewrite rules (a hash never reaches the
+  // server, so Vercel's static index.html serves it exactly like the root).
+  if (window.location.hash === '#styleguide') {
+    return (
+      <div className="min-h-svh bg-ink text-bone">
+        <StyleGuide />
+      </div>
+    )
   }
 
   return (

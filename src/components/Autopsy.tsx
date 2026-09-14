@@ -107,7 +107,7 @@ export function Autopsy({ characterId, isGM }: { characterId: Id<'characters'>; 
 // Ported from the old app's ScanTierBar — a timeline with a diamond marker
 // at each tier's scan threshold, so players can see exactly how many more
 // scans the next level needs, not just an abstract filled/unfilled segment.
-function ScanTierBar({
+export function ScanTierBar({
   scanCount,
   thresholds,
   unlocked,
@@ -495,7 +495,7 @@ function AutopsySession({
               <p className="text-center font-mono text-xs text-bone-dim">Logging results…</p>
             ) : phase === 'progress' ? (
               celebrateTier !== null && (
-                <div className="animate-tier-unlock animate-tier-glow border border-phosphor bg-phosphor-faint px-3 py-2 text-center">
+                <div className="animate-tier-unlock animate-tier-glow animate-tier-shine border border-phosphor bg-phosphor-faint px-3 py-2 text-center">
                   <p className="text-glow font-display text-sm tracking-widest text-phosphor uppercase">
                     ◆ Dossier Tier {celebrateTier} Unlocked ◆
                   </p>

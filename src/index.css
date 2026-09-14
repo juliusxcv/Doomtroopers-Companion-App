@@ -118,6 +118,48 @@ body::before {
   animation: tier-glow-pulse 1.1s ease-in-out infinite;
 }
 
+/* Diagonal light band sweeping across the banner on a loop — layered on
+   top of the glow pulse, not a replacement for it. Needs `relative` +
+   `hidden` overflow on the banner itself so the sweep is clipped to its
+   bounds instead of spilling past the border. */
+@keyframes tier-shine-sweep {
+  0% {
+    transform: translateX(-160%) skewX(-20deg);
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  88% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(260%) skewX(-20deg);
+    opacity: 0;
+  }
+}
+
+.animate-tier-shine {
+  position: relative;
+  overflow: hidden;
+}
+
+.animate-tier-shine::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 35%;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    color-mix(in oklab, var(--color-phosphor) 75%, transparent) 50%,
+    transparent 100%
+  );
+  animation: tier-shine-sweep 2.6s cubic-bezier(0.6, 0.04, 0.4, 0.96) infinite;
+  animation-delay: 0.5s;
+  pointer-events: none;
+}
+
 /* ============================================================
    Codex prose — long-form lore is read in a serif built for
    paragraphs, not the mono terminal font used for UI chrome.
