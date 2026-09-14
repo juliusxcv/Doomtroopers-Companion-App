@@ -249,6 +249,25 @@ function EntryRow({
 
       {open && (entry.unlocked || isGM) && (
         <div className="mt-1 panel-raised p-3">
+          {(entry.from || entry.origin || entry.dateStamp) && (
+            <div className="mb-2 space-y-0.5 border-b border-phosphor-faint pb-2 font-mono text-[10px] tracking-widest text-phosphor-dim uppercase">
+              {entry.from && (
+                <p>
+                  From: <span className="text-bone-dim normal-case tracking-normal">{entry.from}</span>
+                </p>
+              )}
+              {entry.origin && (
+                <p>
+                  Origin: <span className="text-bone-dim normal-case tracking-normal">{entry.origin}</span>
+                </p>
+              )}
+              {entry.dateStamp && (
+                <p>
+                  Datestamp: <span className="text-bone-dim normal-case tracking-normal">{entry.dateStamp}</span>
+                </p>
+              )}
+            </div>
+          )}
           {entry.code && (
             <p className="text-glow mb-2 font-mono text-base font-semibold tracking-wide text-phosphor">
               {entry.code}

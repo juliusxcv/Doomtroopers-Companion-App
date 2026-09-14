@@ -69,6 +69,11 @@ export default defineSchema({
     weapons: v.optional(WEAPONS),
     abilities: v.optional(v.array(ABILITY)),
     companions: v.optional(v.array(COMPANION)),
+    // Narrative Arbites-report bio (Operator Profile) + YouTube trailer id,
+    // authored as a "## Dossier" section on the same vault note as the
+    // stats/abilities above — see scripts/sync-codex.mjs.
+    dossier: v.optional(v.string()),
+    videoId: v.optional(v.string()),
   }),
 
   players: defineTable({
@@ -189,6 +194,13 @@ export default defineSchema({
     body: v.string(),
     tiers: v.optional(v.array(v.object({ body: v.string() }))),
     monsterId: v.optional(v.string()),
+    // Optional letterhead fields for in-fiction correspondence entries (the
+    // "Astropathic Transmissions"/"Interrogation Records" branches) —
+    // rendered above the body when present, unused by every other entry
+    // type. See scripts/sync-codex.mjs.
+    from: v.optional(v.string()),
+    origin: v.optional(v.string()),
+    dateStamp: v.optional(v.string()),
     unlocked: v.boolean(),
     syncedAt: v.number(),
   })

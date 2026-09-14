@@ -1,9 +1,22 @@
 import { useQuery } from 'convex/react'
+import { useState } from 'react'
+import Markdown from 'react-markdown'
 import { api } from '../../convex/_generated/api'
 import type { Doc, Id } from '../../convex/_generated/dataModel'
 import { AbilitiesList, StatsAndWeapons } from './StatBlock'
+import { TabBar } from './TabBar'
+import { VideoLink } from './VideoLink'
 
+// Mirrors characters.listProfiles/getProfile's computed shape (roster
+// fields + campaign stats derived from real play data) — see convex/characters.ts.
+type Profile = Doc<'characters'> & {
+  autopsiesCompleted: number
+  itemsRecovered: number
+  scrap: number
+  components: number
+}
 type Companion = NonNullable<Doc<'characters'>['companions']>[number]
+type SubTab = 'stats' | 'abilities' | 'lore'
 
 // Ported from the old app's player-avatars backup — static files, not
 // vault-sourced, same call as src/components/Autopsy.tsx's CREATURE_IMAGES
@@ -28,23 +41,20 @@ function initials(name: string): string {
     .toUpperCase()
 }
 
+// A roster-wide list rather than a single card — the logged-in operator's
+// own dossier opens by default (per the user's own request: least clicks
+// for the thing you look at every session) but every other operator is one
+// tap away, browsable the same way the Bestiary lets you browse specimens.
 export function PlayerProfile({ characterId }: { characterId: Id<'characters'> }) {
-  const profile = useQuery(api.characters.getProfile, { characterId })
+  const profiles = useQuery(api.characters.listProfiles)
 
-  if (profile === undefined) return null
-  if (profile === null) {
-    return (
-      <p className="panel py-6 text-center font-mono text-xs tracking-widest text-bone-dim uppercase">
-        Operator record not found
-      </p>
-    )
-  }
+  if (profiles === undefined) return null
 
-  const portrait = PORTRAITS[profile.name]
-  const hasWeapons = profile.weapons && (profile.weapons.ranged.length > 0 || profile.weapons.melee.length > 0)
-  const hasAbilities = profile.abilities && profile.abilities.length > 0
-  const hasCompanions = profile.companions && profile.companions.length > 0
-  const hasCard = profile.stats || hasWeapons || hasAbilities || hasCompanions
+  const sorted = [...profiles].sort((a, b) => {
+    if (a._id === characterId) return -1
+    if (b._id === characterId) return 1
+    return a.name.localeCompare(b.name)
+  })
 
   return (
     <div className="space-y-3">
@@ -52,23 +62,71 @@ export function PlayerProfile({ characterId }: { characterId: Id<'characters'> }
         ++ Operator Profile ++
       </h2>
 
-      <div className="panel overflow-hidden">
-        {portrait ? (
-          <img src={portrait} alt={profile.name} className="aspect-square w-full object-cover" />
-        ) : (
-          <div className="flex aspect-square w-full items-center justify-center bg-panel-raised">
-            <span className="text-glow font-display text-6xl text-phosphor-dim">{initials(profile.name)}</span>
-          </div>
-        )}
+      <div className="space-y-2">
+        {sorted.map((p) => (
+          <CharacterCard key={p._id} profile={p} isMe={p._id === characterId} />
+        ))}
       </div>
+    </div>
+  )
+}
 
-      <div className="text-center">
-        <h3 className="text-glow font-display text-2xl text-phosphor">{profile.name}</h3>
-        {profile.playerRealName && (
-          <p className="font-mono text-xs text-bone-dim">{profile.playerRealName}</p>
-        )}
+function CharacterCard({ profile, isMe }: { profile: Profile; isMe: boolean }) {
+  const [tab, setTab] = useState<SubTab>('stats')
+  const portrait = PORTRAITS[profile.name]
+
+  return (
+    <details className="panel" open={isMe}>
+      <summary className="flex cursor-pointer list-none items-center gap-3 p-3">
+        <div className="h-12 w-12 shrink-0 overflow-hidden bg-panel-raised">
+          {portrait ? (
+            <img src={portrait} alt={profile.name} className="h-full w-full object-cover" />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center">
+              <span className="text-glow font-display text-lg text-phosphor-dim">{initials(profile.name)}</span>
+            </div>
+          )}
+        </div>
+        <span className="min-w-0 flex-1">
+          <span className="text-glow block truncate font-display text-lg text-phosphor">
+            {profile.name}
+            {isMe && <span className="ml-1.5 font-mono text-[9px] tracking-widest text-brass">YOU</span>}
+          </span>
+          {profile.playerRealName && (
+            <span className="block truncate font-mono text-[11px] text-bone-dim">{profile.playerRealName}</span>
+          )}
+        </span>
+        <span className="font-mono text-phosphor-dim">▾</span>
+      </summary>
+
+      <div className="space-y-3 border-t border-phosphor-faint p-3">
+        <TabBar
+          tabs={
+            [
+              { key: 'stats', label: 'Stats' },
+              { key: 'abilities', label: 'Abilities' },
+              { key: 'lore', label: 'Lore' },
+            ] as const
+          }
+          value={tab}
+          onChange={setTab}
+        />
+
+        {tab === 'stats' && <StatsTab profile={profile} />}
+        {tab === 'abilities' && <AbilitiesTab profile={profile} />}
+        {tab === 'lore' && <LoreTab profile={profile} />}
       </div>
+    </details>
+  )
+}
 
+function StatsTab({ profile }: { profile: Profile }) {
+  const hasWeapons = profile.weapons && (profile.weapons.ranged.length > 0 || profile.weapons.melee.length > 0)
+  const hasCompanions = profile.companions && profile.companions.length > 0
+  const hasCombatCard = profile.stats || hasWeapons || hasCompanions
+
+  return (
+    <div className="space-y-3">
       <div className="grid grid-cols-4 gap-1">
         {[
           { label: 'Autopsies', value: profile.autopsiesCompleted },
@@ -76,7 +134,7 @@ export function PlayerProfile({ characterId }: { characterId: Id<'characters'> }
           { label: 'Scrap', value: profile.scrap },
           { label: 'Components', value: profile.components },
         ].map(({ label, value }) => (
-          <div key={label} className="panel py-1.5 text-center">
+          <div key={label} className="panel-raised py-1.5 text-center">
             <div className="font-mono text-[8px] tracking-widest text-phosphor-dim uppercase">{label}</div>
             <div className="text-glow font-display text-lg leading-none text-phosphor">{value}</div>
           </div>
@@ -84,17 +142,23 @@ export function PlayerProfile({ characterId }: { characterId: Id<'characters'> }
       </div>
 
       {profile.stats && (
-        <div className="panel p-3">
+        <div className="panel-raised p-3">
           <StatsAndWeapons stats={profile.stats} weapons={profile.weapons ?? { ranged: [], melee: [] }} />
         </div>
       )}
 
-      {hasAbilities && <AbilitiesList abilities={profile.abilities!} />}
+      {hasCompanions &&
+        profile.companions!.map((c, i) => (
+          <div key={i} className="panel-raised p-3">
+            <div className="mb-2 font-mono text-[11px] tracking-widest text-phosphor-dim uppercase">
+              ◊ Companion — {c.name}
+            </div>
+            <StatsAndWeapons stats={c.stats} weapons={c.weapons} />
+          </div>
+        ))}
 
-      {hasCompanions && profile.companions!.map((c, i) => <CompanionCard key={i} companion={c} />)}
-
-      {!hasCard && (
-        <p className="panel py-6 text-center font-mono text-xs tracking-widest text-bone-dim uppercase">
+      {!hasCombatCard && (
+        <p className="py-6 text-center font-mono text-xs tracking-widest text-bone-dim uppercase">
           ◊ No stat data catalogued ◊
         </p>
       )}
@@ -102,17 +166,53 @@ export function PlayerProfile({ characterId }: { characterId: Id<'characters'> }
   )
 }
 
-function CompanionCard({ companion }: { companion: Companion }) {
-  const hasAbilities = companion.abilities && companion.abilities.length > 0
+function AbilitiesTab({ profile }: { profile: Profile }) {
+  const hasAbilities = profile.abilities && profile.abilities.length > 0
+  const companionsWithAbilities = (profile.companions ?? []).filter(
+    (c): c is Companion & { abilities: NonNullable<Companion['abilities']> } =>
+      !!c.abilities && c.abilities.length > 0,
+  )
+
+  if (!hasAbilities && companionsWithAbilities.length === 0) {
+    return (
+      <p className="py-6 text-center font-mono text-xs tracking-widest text-bone-dim uppercase">
+        ◊ No abilities catalogued ◊
+      </p>
+    )
+  }
+
   return (
-    <div className="space-y-2">
-      <div className="panel p-3">
-        <div className="mb-2 font-mono text-[11px] tracking-widest text-phosphor-dim uppercase">
-          ◊ Companion — {companion.name}
+    <div className="space-y-3">
+      {hasAbilities && <AbilitiesList abilities={profile.abilities!} />}
+      {companionsWithAbilities.map((c, i) => (
+        <div key={i}>
+          <div className="mb-1 font-mono text-[11px] tracking-widest text-phosphor-dim uppercase">
+            ◊ Companion — {c.name}
+          </div>
+          <AbilitiesList abilities={c.abilities} />
         </div>
-        <StatsAndWeapons stats={companion.stats} weapons={companion.weapons} />
-      </div>
-      {hasAbilities && <AbilitiesList abilities={companion.abilities!} />}
+      ))}
+    </div>
+  )
+}
+
+function LoreTab({ profile }: { profile: Profile }) {
+  if (!profile.dossier && !profile.videoId) {
+    return (
+      <p className="py-6 text-center font-mono text-xs tracking-widest text-bone-dim uppercase">
+        ◊ No dossier on file ◊
+      </p>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      {profile.videoId && <VideoLink videoId={profile.videoId} label="Dossier Trailer" />}
+      {profile.dossier && (
+        <div className="prose-lore">
+          <Markdown>{profile.dossier}</Markdown>
+        </div>
+      )}
     </div>
   )
 }

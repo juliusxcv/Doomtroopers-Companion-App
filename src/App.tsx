@@ -9,6 +9,12 @@ import { Cogitator } from './components/Cogitator'
 import { Inventory } from './components/Inventory'
 import { PlayerProfile } from './components/PlayerProfile'
 import { StyleGuide } from './components/StyleGuide'
+import { TabBar } from './components/TabBar'
+import { VideoLink } from './components/VideoLink'
+
+// The campaign's pre-launch teaser trailer (from the Webflow teaser site),
+// shown behind a click on the Lobby splash — see HeroSplash.
+const CAMPAIGN_TRAILER_ID = 'xDjncwOnUH0'
 
 type Identity = { sessionId: Id<'sessions'>; playerId: Id<'players'> }
 
@@ -59,7 +65,7 @@ export default function App() {
 
   return (
     <div className="min-h-svh bg-ink text-bone">
-      <div className={`mx-auto flex min-h-svh w-full max-w-md flex-col px-4 py-6 ${identity ? '' : 'justify-center'}`}>
+      <div className="mx-auto flex min-h-svh w-full max-w-md flex-col px-4 py-6">
         {identity ? (
           <SessionShell identity={identity} onLeave={handleLeave} />
         ) : (
@@ -70,29 +76,26 @@ export default function App() {
   )
 }
 
-function TabBar<T extends string>({
-  tabs,
-  value,
-  onChange,
-}: {
-  tabs: readonly { key: T; label: string }[]
-  value: T
-  onChange: (key: T) => void
-}) {
+// Full-bleed teaser lockup ported from the campaign's pre-launch Webflow
+// site — negative margins cancel the App shell's own px-4/py-6 padding so
+// the art reaches the edges of the max-w-md column, matching that site's
+// cinematic hero rather than sitting boxed-in like the rest of the UI.
+function HeroSplash() {
   return (
-    <div className="panel flex p-1">
-      {tabs.map((t) => (
-        <button
-          key={t.key}
-          type="button"
-          onClick={() => onChange(t.key)}
-          className={`flex-1 py-2 font-mono text-xs font-medium tracking-widest uppercase transition-colors ${
-            value === t.key ? 'bg-phosphor-faint text-glow text-phosphor' : 'text-bone-dim hover:text-bone'
-          }`}
-        >
-          {t.label}
-        </button>
-      ))}
+    <div className="-mx-4 -mt-6 space-y-3 border-b border-phosphor-faint bg-ink pb-4">
+      <img
+        src="/hero/doomtroopers-logo.webp"
+        alt="Doomtroopers"
+        className="mx-auto w-4/5 max-w-xs pt-6"
+      />
+      <img
+        src="/hero/team-lineup.webp"
+        alt="The Doomtroopers operatives, assembled"
+        className="mx-auto block max-h-56 w-auto object-contain"
+      />
+      <div className="px-4">
+        <VideoLink videoId={CAMPAIGN_TRAILER_ID} label="Campaign Trailer" />
+      </div>
     </div>
   )
 }
@@ -102,11 +105,10 @@ function Lobby({ onJoined }: { onJoined: (identity: Identity) => void }) {
 
   return (
     <div className="space-y-6">
+      <HeroSplash />
+
       <div className="text-center">
         <p className="font-mono text-[10px] tracking-[0.3em] text-phosphor-dim">++ COGITATOR LINK ++</p>
-        <h1 className="text-glow font-display text-3xl leading-tight text-phosphor">
-          Doomtroopers Companion
-        </h1>
         <p className="mt-2 font-mono text-xs text-bone-dim">Start a session as GM, or join one with a code.</p>
       </div>
 

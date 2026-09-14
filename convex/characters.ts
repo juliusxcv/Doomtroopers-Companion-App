@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { ABILITY, COMPANION, STATS, WEAPONS } from "./schema";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, type QueryCtx } from "./_generated/server";
+import type { Doc } from "./_generated/dataModel";
 
 export const list = query({
   args: {},
@@ -9,37 +10,51 @@ export const list = query({
   },
 });
 
-// A character's full Operator Profile: roster fields + stats/weapons/
-// abilities (if authored) + campaign stats computed from real play data
-// (not vault content — these change during the session).
+// Shared by getProfile/listProfiles: roster fields + stats/weapons/
+// abilities/dossier (if authored) + campaign stats computed from real play
+// data (not vault content — these change during the session).
+async function computeProfile(ctx: QueryCtx, character: Doc<"characters">) {
+  const characterId = character._id;
+  const attempts = await ctx.db
+    .query("autopsyAttempts")
+    .withIndex("by_character", (q) => q.eq("characterId", characterId))
+    .collect();
+  const resourceRow = await ctx.db
+    .query("resources")
+    .withIndex("by_character", (q) => q.eq("characterId", characterId))
+    .unique();
+  const itemsRecovered = (
+    await ctx.db
+      .query("inventory")
+      .withIndex("by_character", (q) => q.eq("characterId", characterId))
+      .collect()
+  ).length;
+
+  return {
+    ...character,
+    autopsiesCompleted: attempts.filter((a) => a.won).length,
+    itemsRecovered,
+    scrap: resourceRow?.scrap ?? 0,
+    components: resourceRow?.components ?? 0,
+  };
+}
+
 export const getProfile = query({
   args: { characterId: v.id("characters") },
   handler: async (ctx, { characterId }) => {
     const character = await ctx.db.get(characterId);
     if (!character) return null;
+    return await computeProfile(ctx, character);
+  },
+});
 
-    const attempts = await ctx.db
-      .query("autopsyAttempts")
-      .withIndex("by_character", (q) => q.eq("characterId", characterId))
-      .collect();
-    const resourceRow = await ctx.db
-      .query("resources")
-      .withIndex("by_character", (q) => q.eq("characterId", characterId))
-      .unique();
-    const itemsRecovered = (
-      await ctx.db
-        .query("inventory")
-        .withIndex("by_character", (q) => q.eq("characterId", characterId))
-        .collect()
-    ).length;
-
-    return {
-      ...character,
-      autopsiesCompleted: attempts.filter((a) => a.won).length,
-      itemsRecovered,
-      scrap: resourceRow?.scrap ?? 0,
-      components: resourceRow?.components ?? 0,
-    };
+// Every roster member's full profile — powers the Operator Profile's
+// "browse other operators" list (see src/components/PlayerProfile.tsx).
+export const listProfiles = query({
+  args: {},
+  handler: async (ctx) => {
+    const characters = await ctx.db.query("characters").collect();
+    return await Promise.all(characters.map((c) => computeProfile(ctx, c)));
   },
 });
 
@@ -58,6 +73,8 @@ export const syncStats = mutation({
         weapons: v.optional(WEAPONS),
         abilities: v.optional(v.array(ABILITY)),
         companions: v.optional(v.array(COMPANION)),
+        dossier: v.optional(v.string()),
+        videoId: v.optional(v.string()),
       }),
     ),
   },
@@ -78,6 +95,8 @@ export const syncStats = mutation({
         weapons: c.weapons,
         abilities: c.abilities,
         companions: c.companions,
+        dossier: c.dossier,
+        videoId: c.videoId,
       });
       updated++;
     }

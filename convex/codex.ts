@@ -14,6 +14,9 @@ const entryContentFields = {
   body: v.string(),
   tiers: v.optional(v.array(v.object({ body: v.string() }))),
   monsterId: v.optional(v.string()),
+  from: v.optional(v.string()),
+  origin: v.optional(v.string()),
+  dateStamp: v.optional(v.string()),
 };
 
 // Mirrors the old app's autopsy-tiers.ts curve exactly (tier 0 = base,
@@ -37,15 +40,21 @@ function computeUnlockedTierCount(base: number, scanCount: number, tierCount: nu
 
 // Called by scripts/sync-codex.mjs. `unlocked` is intentionally absent from
 // entryContentFields so a re-sync never touches it on existing entries —
-// only new entries start locked.
+// only new entries start locked, unless the note itself declares
+// `unlockedByDefault` (e.g. a reference-archive transmission that isn't
+// meant to be gated at all) — that flag only affects the initial insert,
+// never patched onto an existing entry, so a GM who later re-locks one
+// manually is still respected across re-syncs.
 export const sync = mutation({
-  args: { entries: v.array(v.object(entryContentFields)) },
+  args: {
+    entries: v.array(v.object({ ...entryContentFields, unlockedByDefault: v.optional(v.boolean()) })),
+  },
   handler: async (ctx, { entries }) => {
     let created = 0;
     let updated = 0;
     const seenSlugs = new Set(entries.map((e) => e.slug));
 
-    for (const entry of entries) {
+    for (const { unlockedByDefault, ...entry } of entries) {
       const existing = await ctx.db
         .query("codex_entries")
         .withIndex("by_slug", (q) => q.eq("slug", entry.slug))
@@ -54,7 +63,11 @@ export const sync = mutation({
         await ctx.db.patch(existing._id, { ...entry, syncedAt: Date.now() });
         updated++;
       } else {
-        await ctx.db.insert("codex_entries", { ...entry, unlocked: false, syncedAt: Date.now() });
+        await ctx.db.insert("codex_entries", {
+          ...entry,
+          unlocked: unlockedByDefault ?? false,
+          syncedAt: Date.now(),
+        });
         created++;
       }
     }
@@ -118,7 +131,9 @@ export const listForPlayers = query({
     return await Promise.all(
       entries.map(async (e) => {
         if (e.tiers && e.monsterId) return resolveTieredEntry(ctx, e);
-        return e.unlocked ? e : { ...e, body: "", code: undefined };
+        return e.unlocked
+          ? e
+          : { ...e, body: "", code: undefined, from: undefined, origin: undefined, dateStamp: undefined };
       }),
     );
   },

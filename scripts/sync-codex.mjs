@@ -410,6 +410,8 @@ for (const file of files) {
       weapons: loadouts?.[0]?.weapons,
       abilities: parseAbilities(content),
       companions: parseCompanions(content),
+      dossier: extractSection(content, 2, "Dossier") ?? undefined,
+      videoId: fm.videoId ? String(fm.videoId) : undefined,
     });
     continue;
   }
@@ -446,6 +448,10 @@ for (const file of files) {
     body: tiers ? "" : body,
     tiers: tiers ?? undefined,
     monsterId,
+    from: fm.from !== undefined ? String(fm.from) : undefined,
+    origin: fm.origin !== undefined ? String(fm.origin) : undefined,
+    dateStamp: fm.dateStamp !== undefined ? String(fm.dateStamp) : undefined,
+    unlockedByDefault: fm.unlockedByDefault === true ? true : undefined,
   });
 
   // Mechanical data lives on the same public note now (not a separate
