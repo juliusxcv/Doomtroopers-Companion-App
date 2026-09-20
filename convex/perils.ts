@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 
 // Mirrors MIN_PERIL_LEVEL/MAX_PERIL_LEVEL in src/lib/perils.ts — one column
 // (one extra d6) per level, 1D6 through 8D6.
@@ -49,10 +49,17 @@ export const setLevel = mutation({
 // Rolls the psyker's current gauge level in d6 server-side (so the result
 // can't be influenced client-side) and logs it. Which named Peril the total
 // resolves to is looked up client-side from the static table — see
-// src/lib/perils.ts.
+// src/lib/perils.ts. `actingCharacterId` is whoever is actually pressing the
+// button (Vex herself, or the GM overseeing her) — re-derived server-side
+// (never trusted from the client) so a GM using this screen to check
+// something doesn't pollute Vex's real Peril log, matching the same
+// GM-exclusion convention as monsters.submitResult/cogitatorPoints.award.
 export const roll = mutation({
-  args: { characterId: v.id("characters") },
-  handler: async (ctx, { characterId }) => {
+  args: { characterId: v.id("characters"), actingCharacterId: v.id("characters") },
+  handler: async (ctx, { characterId, actingCharacterId }) => {
+    const actingCharacter = await ctx.db.get(actingCharacterId);
+    if (!actingCharacter) throw new Error("Unknown character.");
+
     const gauge = await ctx.db
       .query("perilGauge")
       .withIndex("by_character", (q) => q.eq("characterId", characterId))
@@ -60,7 +67,18 @@ export const roll = mutation({
     const level = gauge?.level ?? MIN_LEVEL;
     const dice = Array.from({ length: level }, () => Math.floor(Math.random() * 6) + 1);
     const total = dice.reduce((sum, d) => sum + d, 0);
-    await ctx.db.insert("perilRolls", { characterId, level, dice, total, createdAt: Date.now() });
+    if (!actingCharacter.isGM) {
+      await ctx.db.insert("perilRolls", { characterId, level, dice, total, createdAt: Date.now() });
+    }
     return { level, dice, total };
+  },
+});
+
+// Admin cleanup only — no in-app UI calls this. Lets a bad/test roll be
+// pruned from the log via `npx convex run`.
+export const deleteRoll = internalMutation({
+  args: { rollId: v.id("perilRolls") },
+  handler: async (ctx, { rollId }) => {
+    await ctx.db.delete(rollId);
   },
 });

@@ -192,9 +192,12 @@ body::before {
    of something the cogitator doesn't normally show.
    ============================================================ */
 .peril-scene {
-  --warp: oklch(0.68 0.19 306);
-  --warp-dim: oklch(0.48 0.14 306);
-  --warp-faint: oklch(0.3 0.08 306);
+  --warp: oklch(0.78 0.31 305);
+  --warp-hot: oklch(0.93 0.15 322);
+  --warp-white: oklch(0.98 0.02 320);
+  --warp-dim: oklch(0.56 0.24 306);
+  --warp-faint: oklch(0.38 0.16 306);
+  --warp-shadow: oklch(0.24 0.11 305);
   position: relative;
 }
 
@@ -242,69 +245,271 @@ body::before {
   opacity: 0.5;
 }
 
-.peril-die {
-  display: flex;
-  height: 2.75rem;
-  width: 2.75rem;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--warp-dim);
-  background: color-mix(in oklab, var(--warp-faint) 35%, var(--color-ink));
-  font-family: var(--font-display);
-  font-size: 1.25rem;
-  color: var(--color-bone);
-  transform: rotate(-45deg);
-}
-.peril-die > span {
-  transform: rotate(45deg);
-}
-.peril-die.is-rolling {
-  animation: peril-die-tumble 160ms linear infinite;
-  border-color: var(--warp);
-  color: var(--warp);
-}
-.peril-die.is-final {
-  animation: peril-die-settle 500ms ease-out;
-  border-color: var(--warp);
-  color: var(--warp);
-  box-shadow: 0 0 10px color-mix(in oklab, var(--warp) 55%, transparent);
+/* The pentagram/dice-ring sigil (src/components/PerilSigil.tsx), built from
+   the hand-authored public/Peril_Pentagram.svg artwork rather than drawn
+   procedurally. Dormant (idle) renders thin and dim; charged (rolling or
+   revealed) recolors to full --warp and switches on the neon glow filter
+   defined inside the SVG itself — the crossfade between the two is what
+   makes the sigil feel like it "wakes up" for a check. */
+.peril-sigil {
+  display: block;
+  width: 100%;
+  max-width: 22rem;
+  margin: 0 auto;
+  aspect-ratio: 1;
+  overflow: visible;
 }
 
-@keyframes peril-die-tumble {
-  0% {
-    transform: rotate(-45deg) scale(1);
-  }
-  25% {
-    transform: rotate(-58deg) scale(1.08);
+/* Fill is a constant white regardless of dormant/charged — including the
+   RuneOrigin discs, which double as each slot's visible socket backdrop.
+   Only the glow (applied below, charged-only) changes; the linework itself
+   never flickers, which is what made the old brightness-pulse read as an
+   abrupt, uneven blink. */
+.peril-artwork .cls-1 {
+  fill: var(--warp-white);
+}
+/* Pivot reference only (read in PerilSigil.tsx for the Rotation Ring's
+   transform-origin) — unlike the RuneOrigin discs, this one was never
+   meant to be seen. */
+.peril-artwork circle[id='RotationRingCenter'] {
+  display: none;
+}
+
+.peril-sigil.is-dormant .peril-artwork {
+  animation: peril-sigil-breathe 4.5s ease-in-out infinite;
+}
+.peril-sigil.is-charged .peril-artwork {
+  filter: url(#peril-neon-glow);
+}
+
+@keyframes peril-sigil-breathe {
+  0%,
+  100% {
+    opacity: 0.6;
   }
   50% {
-    transform: rotate(-33deg) scale(0.94);
+    opacity: 0.85;
+  }
+}
+
+/* Every top-level piece of the sigil (the pentagram, the ring's wrapper,
+   each rune slot — everything except the roll-result numbers, which live
+   in the separate peril-overlay group) trembles harder the higher the
+   Peril Level, nothing at all at Level 1 (--jitter: 0, set inline by
+   PerilSigil.tsx on .peril-artwork and inherited down, collapses every
+   offset below to exactly 0). Applied per-group with a staggered
+   animation-delay rather than once on .peril-artwork as a whole, so the
+   pieces tremble slightly out of phase with each other instead of the
+   entire sigil shifting as one rigid image — smooth ease-in-out and a
+   modest amplitude, tuned down from an earlier steps()-based version that
+   read as a harsh flicker rather than a nervous tremor. */
+.peril-artwork > g {
+  animation: peril-jitter 0.5s ease-in-out infinite;
+}
+.peril-artwork > g:nth-child(1) {
+  animation-delay: 0s;
+}
+.peril-artwork > g:nth-child(2) {
+  animation-delay: -0.06s;
+}
+.peril-artwork > g:nth-child(3) {
+  animation-delay: -0.12s;
+}
+.peril-artwork > g:nth-child(4) {
+  animation-delay: -0.18s;
+}
+.peril-artwork > g:nth-child(5) {
+  animation-delay: -0.24s;
+}
+.peril-artwork > g:nth-child(6) {
+  animation-delay: -0.3s;
+}
+.peril-artwork > g:nth-child(7) {
+  animation-delay: -0.36s;
+}
+.peril-artwork > g:nth-child(8) {
+  animation-delay: -0.42s;
+}
+.peril-artwork > g:nth-child(9) {
+  animation-delay: -0.15s;
+}
+.peril-artwork > g:nth-child(10) {
+  animation-delay: -0.45s;
+}
+/* A rune mid-flare needs its own combined declaration (equal specificity
+   to the nth-child rules above, so source order settles the tie) — a
+   flat-out shorthand redeclaration on a lower-specificity selector would
+   otherwise lose the whole animation list, dropping the flare entirely
+   rather than layering with it, since peril-rune-flare only touches
+   `filter` (no conflict with jitter's `transform`) but shorthand
+   `animation` is resolved as one unit per element, not merged per-name. */
+.peril-artwork > g.peril-rune-flare {
+  animation:
+    peril-rune-flare 1300ms,
+    peril-jitter 0.5s ease-in-out infinite;
+}
+@keyframes peril-jitter {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  25% {
+    transform: translate(calc(var(--jitter) * -1.3px), calc(var(--jitter) * 0.9px))
+      rotate(calc(var(--jitter) * -0.2deg));
+  }
+  50% {
+    transform: translate(calc(var(--jitter) * 1.1px), calc(var(--jitter) * -1.3px))
+      rotate(calc(var(--jitter) * 0.16deg));
   }
   75% {
-    transform: rotate(-52deg) scale(1.05);
-  }
-  100% {
-    transform: rotate(-45deg) scale(1);
+    transform: translate(calc(var(--jitter) * -0.9px), calc(var(--jitter) * -0.9px))
+      rotate(calc(var(--jitter) * -0.14deg));
   }
 }
 
-@keyframes peril-die-settle {
+/* The big scalloped ring spins continuously, always, pivoting on
+   RotationRingCenter (580.41955, 593.96954 — see perilArtwork.ts's
+   PERIL_CENTER). Composed by hand as translate(center) rotate()
+   translate(-center) rather than rotate() + transform-origin: neither
+   transform-box: view-box (an SVG group's default reference box, absolute
+   viewBox-unit origin) nor transform-box: fill-box (the ring's own
+   bounding box, which isn't centered on RotationRingCenter — the artwork
+   isn't symmetric) landed the pivot in the right place, so this sidesteps
+   transform-origin/transform-box entirely: translate/rotate compose
+   relative to the element's own local coordinate origin regardless of
+   either setting, which is exactly what makes this reliable. */
+#RotationRing {
+  animation: peril-ring-spin 2.1s linear infinite;
+}
+@keyframes peril-ring-spin {
+  from {
+    transform: translate(580.41955px, 593.96954px) rotate(0deg) translate(-580.41955px, -593.96954px);
+  }
+  to {
+    transform: translate(580.41955px, 593.96954px) rotate(360deg) translate(-580.41955px, -593.96954px);
+  }
+}
+
+/* Die values drawn over the artwork, one per RuneOrigin. Inverted (dark)
+   fill rather than white, since the RuneOrigin disc behind each number is
+   now itself solid white — a white numeral would vanish into it. Reads as
+   a number stamped/engraved into the glowing coin instead. */
+.peril-slot-number {
+  fill: var(--color-ink);
+  filter: url(#peril-neon-glow);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.peril-slot-number.is-active {
+  animation: peril-slot-flicker 90ms steps(1) infinite;
+}
+.peril-slot-number.is-settled {
+  animation: peril-slot-pop 420ms ease-out;
+}
+@keyframes peril-slot-flicker {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+@keyframes peril-slot-pop {
   0% {
-    transform: rotate(-45deg) scale(1.35);
-    box-shadow: 0 0 22px color-mix(in oklab, var(--warp) 85%, transparent);
+    opacity: 0;
+    transform: scale(1.8);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(0.92);
   }
   100% {
-    transform: rotate(-45deg) scale(1);
-    box-shadow: 0 0 10px color-mix(in oklab, var(--warp) 55%, transparent);
+    transform: scale(1);
   }
 }
 
-.peril-total-glow {
-  color: var(--warp);
-  text-shadow:
-    0 0 6px color-mix(in oklab, var(--warp) 80%, transparent),
-    0 0 22px color-mix(in oklab, var(--warp) 50%, transparent);
+/* The moment a die lands, its rune's outer glow flares — a sharp attack up
+   to a big, bright bloom (both size and opacity gaining together), then a
+   long fade back down to the steady ambient glow. A separate glyph sitting
+   exactly behind peril-slot-number (fully hidden at rest — only the
+   animated drop-shadow and its own brief scale-up escape past its edges),
+   rather than adding drop-shadow onto peril-slot-number's own url()-based
+   filter: mixing an SVG <filter> reference with an animated drop-shadow()
+   in one filter list didn't reliably interpolate in testing, so this stays
+   pure drop-shadow, animated alone. */
+.peril-slot-flare {
+  fill: var(--warp-hot);
+  filter: drop-shadow(0 0 0 transparent);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.peril-slot-flare.is-settled {
+  animation: peril-slot-flare 1300ms;
+}
+@keyframes peril-slot-flare {
+  0% {
+    filter: drop-shadow(0 0 0 transparent);
+    transform: scale(1);
+    animation-timing-function: cubic-bezier(0.1, 0.85, 0.2, 1);
+  }
+  10% {
+    filter: drop-shadow(0 0 110px color-mix(in oklab, var(--warp-hot) 95%, transparent));
+    transform: scale(1.7);
+    animation-timing-function: ease-out;
+  }
+  100% {
+    filter: drop-shadow(0 0 0 transparent);
+    transform: scale(1);
+  }
+}
+
+/* Same flare, applied to the rune's own artwork (its RuneOrigin disc + tick
+   marks), not just the number sitting on top of it — triggered imperatively
+   in PerilSigil.tsx since this targets raw injected SVG markup, not JSX. */
+.peril-rune-flare {
+  animation: peril-rune-flare 1300ms;
+}
+@keyframes peril-rune-flare {
+  0% {
+    filter: drop-shadow(0 0 0 transparent);
+    animation-timing-function: cubic-bezier(0.1, 0.85, 0.2, 1);
+  }
+  10% {
+    filter: drop-shadow(0 0 85px color-mix(in oklab, var(--warp-hot) 90%, transparent));
+    animation-timing-function: ease-out;
+  }
+  100% {
+    filter: drop-shadow(0 0 0 transparent);
+  }
+}
+
+/* A dark-purple blurred backdrop sitting directly behind the total (drawn
+   first so peril-heart-total paints over it) — the pentagram's own
+   linework is busy enough there that even a glowing white total got lost
+   in it without something behind it to clear the ground first. */
+/* Reuses peril-reveal-in (the same scale-and-settle pop the "Peril
+   Manifests" card below uses) rather than a plain opacity fade, so the
+   total lands with the same bit of punch as the rest of the reveal. */
+.peril-heart-backdrop,
+.peril-heart-total {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.peril-heart-backdrop.is-revealed,
+.peril-heart-total.is-revealed {
+  opacity: 1;
+  animation: peril-reveal-in 450ms ease-out;
+}
+
+.peril-heart-backdrop {
+  filter: url(#peril-total-backdrop);
+}
+
+.peril-heart-total {
+  fill: var(--warp-white);
+  filter: url(#peril-neon-glow);
 }
 
 .peril-roll-btn {
