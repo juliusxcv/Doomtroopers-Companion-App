@@ -111,11 +111,16 @@ export function PerilSigil({ count, values, activeIndex, total, charged, rolling
             flicker across everything at once. */}
         <filter id="peril-neon-glow" x="-160%" y="-160%" width="420%" height="420%">
           <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="innerBlur" />
-          <feFlood floodColor="var(--warp-hot)" floodOpacity="0.95" result="innerColor" />
+          {/* floodColor set via style, not as a bare "var(...)" attribute
+              value — some mobile WebKit versions don't resolve CSS custom
+              properties reliably when they're read as a plain XML/SVG
+              presentation attribute rather than through the style/CSS
+              cascade, which silently broke the whole glow on mobile. */}
+          <feFlood style={{ floodColor: 'var(--warp-hot)' }} floodOpacity="0.95" result="innerColor" />
           <feComposite in="innerColor" in2="innerBlur" operator="in" result="innerGlow" />
 
           <feGaussianBlur in="SourceAlpha" stdDeviation="32" result="outerBlur" />
-          <feFlood floodColor="var(--warp)" floodOpacity="0.75" result="outerColor">
+          <feFlood style={{ floodColor: 'var(--warp)' }} floodOpacity="0.75" result="outerColor">
             <animate attributeName="flood-opacity" values="0.5;0.95;0.5" dur="2.2s" repeatCount="indefinite" />
           </feFlood>
           <feComposite in="outerColor" in2="outerBlur" operator="in" result="outerGlow" />
@@ -134,7 +139,7 @@ export function PerilSigil({ count, values, activeIndex, total, charged, rolling
             reads instead of fighting the artwork for contrast. */}
         <filter id="peril-total-backdrop" x="-250%" y="-250%" width="600%" height="600%">
           <feGaussianBlur in="SourceAlpha" stdDeviation="34" result="blur" />
-          <feFlood floodColor="var(--warp-shadow)" floodOpacity="0.92" result="darkColor" />
+          <feFlood style={{ floodColor: 'var(--warp-shadow)' }} floodOpacity="0.92" result="darkColor" />
           <feComposite in="darkColor" in2="blur" operator="in" result="darkGlow" />
           <feMerge>
             <feMergeNode in="darkGlow" />

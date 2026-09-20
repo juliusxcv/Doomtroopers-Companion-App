@@ -69,6 +69,7 @@ function PerilCheck({
   // else adjusts it, and the sigil must keep drawing the ring it already
   // started animating rather than reshuffling its slot count underneath it.
   const [rolledCount, setRolledCount] = useState<number | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const cancelledRef = useRef(false)
 
   useEffect(() => {
@@ -95,6 +96,7 @@ function PerilCheck({
   // leave the last roll's result sitting on top of it.
   function resetSigilState() {
     setPhase('idle')
+    setError(null)
     setResult(null)
     setTotal(null)
     setSettledDice([])
@@ -111,41 +113,51 @@ function PerilCheck({
   async function handleRoll() {
     if (phase === 'rolling') return
     setPhase('rolling')
+    setError(null)
     setResult(null)
     setTotal(null)
     setSettledDice([])
     setActiveIndex(null)
     setActiveFace(null)
 
-    // The real roll happens now, in one server round trip — everything
-    // below is just replaying that already-known result one die at a time.
-    const res = await roll({ characterId, actingCharacterId })
-    if (cancelledRef.current) return
-    setRolledCount(res.dice.length)
+    try {
+      // The real roll happens now, in one server round trip — everything
+      // below is just replaying that already-known result one die at a time.
+      const res = await roll({ characterId, actingCharacterId })
+      if (cancelledRef.current) return
+      setRolledCount(res.dice.length)
 
-    for (let i = 0; i < res.dice.length; i++) {
-      setActiveIndex(i)
-      const flickerUntil = Date.now() + FLICKER_PER_DIE_MS
-      while (Date.now() < flickerUntil) {
-        setActiveFace(1 + Math.floor(Math.random() * 6))
-        await sleep(FLICKER_TICK_MS)
+      for (let i = 0; i < res.dice.length; i++) {
+        setActiveIndex(i)
+        const flickerUntil = Date.now() + FLICKER_PER_DIE_MS
+        while (Date.now() < flickerUntil) {
+          setActiveFace(1 + Math.floor(Math.random() * 6))
+          await sleep(FLICKER_TICK_MS)
+          if (cancelledRef.current) return
+        }
+        setActiveFace(null)
+        setActiveIndex(null)
+        setSettledDice((prev) => [...prev, res.dice[i]])
+        await sleep(GAP_BETWEEN_DICE_MS)
         if (cancelledRef.current) return
       }
-      setActiveFace(null)
-      setActiveIndex(null)
-      setSettledDice((prev) => [...prev, res.dice[i]])
-      await sleep(GAP_BETWEEN_DICE_MS)
+
+      await sleep(TOTAL_REVEAL_DELAY_MS)
       if (cancelledRef.current) return
+      setTotal(res.total)
+
+      await sleep(CARD_REVEAL_DELAY_MS)
+      if (cancelledRef.current) return
+      setResult({ dice: res.dice, total: res.total, peril: lookupPeril(res.total) })
+      setPhase('revealed')
+    } catch (err) {
+      // Without this, any failure mid-roll (a dropped connection, a flaky
+      // mobile network) left the button stuck reading "Channeling…"
+      // forever, with no way to recover short of reloading the page.
+      if (cancelledRef.current) return
+      setError(err instanceof Error ? err.message : 'The roll failed — try again.')
+      setPhase('idle')
     }
-
-    await sleep(TOTAL_REVEAL_DELAY_MS)
-    if (cancelledRef.current) return
-    setTotal(res.total)
-
-    await sleep(CARD_REVEAL_DELAY_MS)
-    if (cancelledRef.current) return
-    setResult({ dice: res.dice, total: res.total, peril: lookupPeril(res.total) })
-    setPhase('revealed')
   }
 
   const slotValues: (number | null)[] = Array.from({ length: displayCount }, (_, i) => {
@@ -206,6 +218,7 @@ function PerilCheck({
           <button type="button" onClick={handleRoll} disabled={phase === 'rolling'} className="peril-roll-btn w-full">
             {phase === 'rolling' ? 'Channeling…' : phase === 'revealed' ? 'Roll Again' : 'Roll Peril'}
           </button>
+          {error && <p className="text-center font-mono text-xs text-sanguine">{error}</p>}
         </div>
       </div>
 
