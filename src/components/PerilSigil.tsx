@@ -1,6 +1,11 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react'
 import { loadPerilArtwork, PERIL_CENTER, PERIL_SLOT_IDS, PERIL_SLOT_ORIGINS, PERIL_VIEW_BOX } from '../lib/perilArtwork'
+import { buildFlinchKeyframes, buildPainFlashKeyframes } from '../lib/perilFlinch'
 import { MAX_PERIL_LEVEL, MIN_PERIL_LEVEL } from '../lib/perils'
+
+// Taps closer together than this build on each other, escalating the
+// reaction — poking it repeatedly makes it thrash harder, not just repeat.
+const TAP_STREAK_WINDOW_MS = 900
 
 export type PerilSigilProps = {
   /** Number of dice slots to draw — the current Peril Level (1-8). */
@@ -84,6 +89,94 @@ export function PerilSigil({ count, values, activeIndex, total, charged, rolling
     prevSettledCountRef.current = settledCount
   }, [values])
 
+  // Tap/click reaction: the sigil flinches away from the hit, flashes red,
+  // sends a shockwave out from the tap point, spikes the Rotation Ring's
+  // spin, and its rune sockets flare outward from the impact. Imperative
+  // (Web Animations API + class toggles) since most of what it moves is
+  // raw injected artwork, and each tap needs its own direction.
+  const svgRef = useRef<SVGSVGElement | null>(null)
+  const flinchRef = useRef<SVGGElement | null>(null)
+  const reactionAnimsRef = useRef<Animation[]>([])
+  const reactionTimersRef = useRef<number[]>([])
+  const lastTapRef = useRef(0)
+  const tapStreakRef = useRef(0)
+  const rippleIdRef = useRef(0)
+  const [ripples, setRipples] = useState<{ id: number; x: number; y: number }[]>([])
+
+  function getRingSpin() {
+    const ring = artworkRef.current?.querySelector('#RotationRing')
+    return ring?.getAnimations().find((a) => (a as CSSAnimation).animationName === 'peril-ring-spin')
+  }
+
+  function stopReaction() {
+    reactionAnimsRef.current.forEach((a) => a.cancel())
+    reactionAnimsRef.current = []
+    reactionTimersRef.current.forEach((t) => window.clearTimeout(t))
+    reactionTimersRef.current = []
+    const spin = getRingSpin()
+    if (spin) spin.playbackRate = 1
+  }
+
+  useEffect(() => stopReaction, [])
+
+  function handleTap(e: ReactMouseEvent<SVGSVGElement>) {
+    const svg = svgRef.current
+    const ctm = svg?.getScreenCTM()
+    if (!svg || !ctm) return
+    const point = svg.createSVGPoint()
+    point.x = e.clientX
+    point.y = e.clientY
+    const { x, y } = point.matrixTransform(ctm.inverse())
+
+    const now = performance.now()
+    tapStreakRef.current = now - lastTapRef.current < TAP_STREAK_WINDOW_MS ? Math.min(tapStreakRef.current + 1, 7) : 1
+    lastTapRef.current = now
+    const intensity = Math.min(1 + 0.3 * (tapStreakRef.current - 1), 2.2)
+
+    const id = ++rippleIdRef.current
+    setRipples((prev) => [...prev.slice(-3), { id, x, y }])
+    navigator.vibrate?.(tapStreakRef.current > 2 ? [20, 30, 40] : 25)
+
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    stopReaction()
+
+    const flinchEl = flinchRef.current
+    if (flinchEl) {
+      reactionAnimsRef.current.push(
+        flinchEl.animate(buildFlinchKeyframes(x, y, intensity), { duration: 760 + 140 * (intensity - 1) }),
+        flinchEl.animate(buildPainFlashKeyframes(intensity), { duration: 950 }),
+      )
+    }
+
+    const spin = getRingSpin()
+    if (spin) {
+      spin.playbackRate = 6
+      for (const [rate, at] of [[3.5, 220], [1.8, 520], [1, 900]] as const) {
+        reactionTimersRef.current.push(
+          window.setTimeout(() => {
+            spin.playbackRate = rate
+          }, at),
+        )
+      }
+    }
+
+    // Sockets nearest the hit flare first, the rest catching it outward.
+    PERIL_SLOT_IDS.slice(0, count).forEach((slotId, i) => {
+      const origin = PERIL_SLOT_ORIGINS[i]
+      if (!origin) return
+      const delay = Math.hypot(origin.x - x, origin.y - y) * 0.32
+      reactionTimersRef.current.push(
+        window.setTimeout(() => {
+          const el = artworkRef.current?.querySelector<SVGGElement>(`#${slotId}`)
+          if (!el) return
+          el.classList.remove('peril-rune-flare')
+          void el.getBoundingClientRect()
+          el.classList.add('peril-rune-flare')
+        }, delay),
+      )
+    })
+  }
+
   const hiddenSlotIds = PERIL_SLOT_IDS.slice(count)
   // 0 at Peril Level 1 (no jitter at all) to 1 at Level 8 (full nervous
   // shake) — read by peril-jitter's keyframes via the --jitter custom
@@ -93,10 +186,12 @@ export function PerilSigil({ count, values, activeIndex, total, charged, rolling
 
   return (
     <svg
+      ref={svgRef}
       viewBox={PERIL_VIEW_BOX}
       className={`peril-sigil ${charged ? 'is-charged' : 'is-dormant'} ${rolling ? 'is-rolling' : ''}`}
       role="img"
       aria-label={total !== null ? `Peril total ${total}` : 'Peril sigil'}
+      onClick={handleTap}
     >
       <defs>
         {/* A true colored glow, not just a blurred copy of the (white)
@@ -152,14 +247,33 @@ export function PerilSigil({ count, values, activeIndex, total, charged, rolling
         <style>{hiddenSlotIds.map((id) => `#${id}{opacity:0}`).join('')}</style>
       )}
 
-      {artworkHtml && (
-        <g
-          ref={artworkRef}
-          className="peril-artwork"
-          style={{ '--jitter': jitterIntensity } as CSSProperties}
-          dangerouslySetInnerHTML={{ __html: artworkHtml }}
-        />
-      )}
+      <g ref={flinchRef} className="peril-flinch">
+        {artworkHtml && (
+          <g
+            ref={artworkRef}
+            className="peril-artwork"
+            style={{ '--jitter': jitterIntensity } as CSSProperties}
+            dangerouslySetInnerHTML={{ __html: artworkHtml }}
+          />
+        )}
+      </g>
+
+      {/* Shockwaves from each tap — outside the flinch group so they stay
+          pinned to where the tap landed while the sigil recoils. */}
+      <g aria-hidden="true">
+        {ripples.map((r) => (
+          <g key={r.id}>
+            <circle className="peril-ripple" cx={r.x} cy={r.y} r={70} />
+            <circle
+              className="peril-ripple is-pain"
+              cx={r.x}
+              cy={r.y}
+              r={70}
+              onAnimationEnd={() => setRipples((prev) => prev.filter((p) => p.id !== r.id))}
+            />
+          </g>
+        ))}
+      </g>
 
       <g className="peril-overlay" textAnchor="middle" dominantBaseline="central">
         {values.map((value, i) => {

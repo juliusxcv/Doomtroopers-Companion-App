@@ -14,17 +14,102 @@ export type Ability = { name: string; description: string }
 
 const STAT_KEYS = ['rc', 'cc', 'ap', 'mv', 'def', 'hp'] as const
 
-export function StatGrid({ stats }: { stats: Stats }) {
+export type StatKey = (typeof STAT_KEYS)[number] | 'inv'
+// Player-applied +/- on top of the base stats (see convex/statMods.ts).
+export type StatMods = Partial<Record<StatKey, number>>
+
+// For RC/CC/DEF the number is a target roll ("3+"), so smaller is better;
+// every other stat is better the bigger it gets.
+const LOWER_IS_BETTER: Record<StatKey, boolean> = {
+  rc: true,
+  cc: true,
+  def: true,
+  ap: false,
+  mv: false,
+  hp: false,
+  inv: false,
+}
+// Mirrors STAT_FLOOR in convex/statMods.ts, which enforces it server-side.
+const STAT_FLOOR: Record<StatKey, number> = { rc: 1, cc: 1, def: 1, ap: 0, mv: 0, hp: 0, inv: 0 }
+
+// "3+" → 3 / "+", `6"` → 6 / `"`. Non-numeric values ("--") can't be adjusted.
+function parseStat(value: string) {
+  const m = /^(\d+)(\D*)$/.exec(value.trim())
+  return m ? { n: Number(m[1]), suffix: m[2] } : null
+}
+
+const TONE_CLASS = {
+  base: 'text-glow text-phosphor',
+  better: 'text-glow-blue text-rarity-rare',
+  worse: 'text-glow-red text-sanguine',
+} as const
+
+// Bestiary cards pass only `stats`; the Operator Profile also passes `mods`
+// (colours numbers blue/red by how the adjustment changes them) and
+// `onAdjust` (shows +/- controls under each adjustable number).
+export function StatGrid({
+  stats,
+  mods,
+  onAdjust,
+  large = false,
+}: {
+  stats: Stats
+  mods?: StatMods
+  onAdjust?: (key: StatKey, delta: 1 | -1) => void
+  large?: boolean
+}) {
   const keys = stats.inv ? [...STAT_KEYS, 'inv' as const] : STAT_KEYS
   return (
     <div className={`grid gap-1 text-center ${stats.inv ? 'grid-cols-7' : 'grid-cols-6'}`}>
-      {keys.map((k) => (
-        <div key={k}>
-          <div className="font-mono text-[9px] tracking-widest text-phosphor-dim uppercase">{k}</div>
-          <div className="text-glow font-display text-lg text-phosphor">{stats[k]}</div>
-        </div>
-      ))}
+      {keys.map((k) => {
+        const raw = stats[k] ?? ''
+        const parsed = parseStat(raw)
+        const delta = parsed ? (mods?.[k] ?? 0) : 0
+        const shown = parsed ? `${parsed.n + delta}${parsed.suffix}` : raw
+        const tone = delta === 0 ? 'base' : delta > 0 !== LOWER_IS_BETTER[k] ? 'better' : 'worse'
+        const canDown = !!parsed && parsed.n + delta - 1 >= STAT_FLOOR[k]
+        return (
+          <div key={k} className="flex flex-col items-center">
+            <div className="font-mono text-[9px] tracking-widest text-phosphor-dim uppercase">{k}</div>
+            {onAdjust && (
+              <StepButton label={`Increase ${k}`} disabled={!parsed} onClick={() => onAdjust(k, 1)}>
+                +
+              </StepButton>
+            )}
+            <div className={`font-display ${large ? 'py-0.5 text-2xl' : 'text-lg'} ${TONE_CLASS[tone]}`}>{shown}</div>
+            {onAdjust && (
+              <StepButton label={`Decrease ${k}`} disabled={!canDown} onClick={() => onAdjust(k, -1)}>
+                −
+              </StepButton>
+            )}
+          </div>
+        )
+      })}
     </div>
+  )
+}
+
+function StepButton({
+  label,
+  disabled,
+  onClick,
+  children,
+}: {
+  label: string
+  disabled: boolean
+  onClick: () => void
+  children: string
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+      className="w-full border border-phosphor-dim py-1 font-mono text-sm leading-none text-bone transition-colors hover:border-phosphor disabled:cursor-not-allowed disabled:opacity-30"
+    >
+      {children}
+    </button>
   )
 }
 
@@ -56,11 +141,23 @@ export function WeaponTable({ label, weapons }: { label: string; weapons: Weapon
   )
 }
 
-export function StatsAndWeapons({ stats, weapons }: { stats: Stats; weapons: Weapons }) {
+export function StatsAndWeapons({
+  stats,
+  weapons,
+  mods,
+  onAdjust,
+  large,
+}: {
+  stats: Stats
+  weapons: Weapons
+  mods?: StatMods
+  onAdjust?: (key: StatKey, delta: 1 | -1) => void
+  large?: boolean
+}) {
   const hasWeapons = weapons.ranged.length > 0 || weapons.melee.length > 0
   return (
     <div className="space-y-3">
-      <StatGrid stats={stats} />
+      <StatGrid stats={stats} mods={mods} onAdjust={onAdjust} large={large} />
       {hasWeapons && (
         <div className="space-y-3">
           {weapons.ranged.length > 0 && <WeaponTable label="Ranged" weapons={weapons.ranged} />}
@@ -71,10 +168,10 @@ export function StatsAndWeapons({ stats, weapons }: { stats: Stats; weapons: Wea
   )
 }
 
-export function AbilitiesList({ abilities }: { abilities: Ability[] }) {
+export function AbilitiesList({ abilities, showTitle = true }: { abilities: Ability[]; showTitle?: boolean }) {
   return (
     <div className="panel space-y-2 p-3">
-      <div className="font-mono text-[11px] tracking-widest text-phosphor-dim uppercase">Abilities</div>
+      {showTitle && <div className="font-mono text-[11px] tracking-widest text-phosphor-dim uppercase">Abilities</div>}
       <ul className="space-y-1.5">
         {abilities.map((a, i) => (
           <li key={i} className="font-body text-sm text-bone-dim">

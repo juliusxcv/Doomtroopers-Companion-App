@@ -161,6 +161,25 @@ export default defineSchema({
     components: v.number(),
   }).index("by_character", ["characterId"]),
 
+  // Player-applied adjustments to a stat block's numbers (wounds, buffs,
+  // injuries) — additive deltas on top of the vault-authored base stats, so
+  // re-syncing the vault never clobbers them (syncStats only patches base
+  // fields). One row per (character, unit): `unit` is "" for the operator's
+  // own stat block, or a companion's name for that companion's card.
+  statMods: defineTable({
+    characterId: v.id("characters"),
+    unit: v.string(),
+    deltas: v.object({
+      rc: v.optional(v.number()),
+      cc: v.optional(v.number()),
+      ap: v.optional(v.number()),
+      mv: v.optional(v.number()),
+      def: v.optional(v.number()),
+      hp: v.optional(v.number()),
+      inv: v.optional(v.number()),
+    }),
+  }).index("by_character", ["characterId"]),
+
   // One row per Autopsy attempt (win or loss), for the Operator Profile's
   // "Autopsies Completed" campaign stat — see monsters.ts:submitResult.
   // The GM's own character is excluded, matching the existing inventory

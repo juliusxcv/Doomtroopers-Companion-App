@@ -68,6 +68,19 @@ body::before {
       0 0 14px color-mix(in oklab, var(--color-phosphor) 40%, transparent);
   }
 
+  /* Same glow as .text-glow, in the blue/red used to flag a stat that's been
+     adjusted for the better / for the worse. */
+  .text-glow-blue {
+    text-shadow:
+      0 0 4px color-mix(in oklab, var(--color-rarity-rare) 70%, transparent),
+      0 0 14px color-mix(in oklab, var(--color-rarity-rare) 40%, transparent);
+  }
+  .text-glow-red {
+    text-shadow:
+      0 0 4px color-mix(in oklab, var(--color-sanguine) 70%, transparent),
+      0 0 14px color-mix(in oklab, var(--color-sanguine) 40%, transparent);
+  }
+
   .panel {
     background: var(--color-panel);
     border: 1px solid var(--color-phosphor-faint);
@@ -258,6 +271,40 @@ body::before {
   margin: 0 auto;
   aspect-ratio: 1;
   overflow: visible;
+  /* Tappable — it flinches when poked (see handleTap in PerilSigil.tsx). */
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* Expanding shockwave from a tap: a white-hot ring, chased by a red one.
+   non-scaling-stroke keeps the line crisp while the circle scales up. */
+.peril-ripple {
+  fill: none;
+  stroke: var(--warp-white);
+  stroke-width: 3px;
+  vector-effect: non-scaling-stroke;
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+  pointer-events: none;
+  animation: peril-ripple 800ms cubic-bezier(0.1, 0.7, 0.3, 1) both;
+}
+.peril-ripple.is-pain {
+  stroke: var(--color-sanguine);
+  stroke-width: 5px;
+  animation-delay: 90ms;
+}
+@keyframes peril-ripple {
+  0% {
+    opacity: 0.95;
+    transform: scale(0.15);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(3.6);
+  }
 }
 
 /* Fill is a constant white regardless of dormant/charged — including the

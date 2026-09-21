@@ -5,8 +5,7 @@ import { api } from '../../convex/_generated/api'
 import type { Doc, Id } from '../../convex/_generated/dataModel'
 import { RARITIES, RARITY_BORDER, RARITY_GLYPH, RARITY_TEXT, type Rarity } from '../lib/rarity'
 import { initials, PORTRAITS } from '../lib/portraits'
-import { AbilitiesList, StatsAndWeapons } from './StatBlock'
-import { TabBar } from './TabBar'
+import { AbilitiesList, StatsAndWeapons, type StatKey, type StatMods } from './StatBlock'
 import { VideoLink } from './VideoLink'
 
 // Mirrors characters.listProfiles/getProfile's computed shape (roster
@@ -18,14 +17,16 @@ type Profile = Doc<'characters'> & {
   components: number
 }
 type Companion = NonNullable<Doc<'characters'>['companions']>[number]
-type SubTab = 'stats' | 'abilities' | 'inventory' | 'lore'
+type InventoryRow = Doc<'inventory'>
 
-// A roster-wide list rather than a single card — the logged-in operator's
-// own dossier opens by default (per the user's own request: least clicks
-// for the thing you look at every session) but every other operator is one
-// tap away, browsable the same way the Bestiary lets you browse specimens.
-export function PlayerProfile({ characterId }: { characterId: Id<'characters'> }) {
+// One operator fills the screen at a time (their own by default — least taps
+// for the thing you look at every session), with a portrait strip on top to
+// jump to any other operator. Inventory is its own full view behind a button
+// rather than a section, since a grid of relics needs the room.
+export function PlayerProfile({ characterId, isGM }: { characterId: Id<'characters'>; isGM: boolean }) {
   const profiles = useQuery(api.characters.listProfiles)
+  const [selectedId, setSelectedId] = useState<Id<'characters'>>(characterId)
+  const [view, setView] = useState<'profile' | 'inventory'>('profile')
 
   if (profiles === undefined) return null
 
@@ -34,120 +35,238 @@ export function PlayerProfile({ characterId }: { characterId: Id<'characters'> }
     if (b._id === characterId) return 1
     return a.name.localeCompare(b.name)
   })
+  const selected = sorted.find((p) => p._id === selectedId) ?? sorted[0]
+  if (!selected) return null
+
+  if (view === 'inventory') {
+    return <InventoryView profile={selected} onBack={() => setView('profile')} />
+  }
 
   return (
-    <div className="space-y-3">
-      <h2 className="font-mono text-[11px] font-medium tracking-widest text-phosphor-dim uppercase">
-        ++ Operator Profile ++
-      </h2>
+    <div className="space-y-4">
+      <RosterStrip
+        profiles={sorted}
+        selectedId={selected._id}
+        onSelect={(id) => {
+          setSelectedId(id)
+          setView('profile')
+        }}
+      />
 
-      <div className="space-y-2">
-        {sorted.map((p) => (
-          <CharacterCard key={p._id} profile={p} isMe={p._id === characterId} />
-        ))}
+      <ProfileHeader profile={selected} isMe={selected._id === characterId} />
+
+      <StatsSection key={selected._id} profile={selected} canEdit={isGM || selected._id === characterId} />
+      <section className="space-y-2">
+        <SectionLabel>Abilities</SectionLabel>
+        <AbilitiesSection profile={selected} />
+      </section>
+
+      <InventoryButton profile={selected} onOpen={() => setView('inventory')} />
+
+      {(selected.dossier || selected.videoId) && (
+        <details className="panel">
+          <summary className="cursor-pointer p-3 font-mono text-[11px] tracking-widest text-phosphor-dim uppercase">
+            ◊ Dossier ◊
+          </summary>
+          <div className="space-y-3 border-t border-phosphor-faint p-3">
+            {selected.videoId && <VideoLink videoId={selected.videoId} label="Dossier Trailer" />}
+            {selected.dossier && (
+              <div className="prose-lore">
+                <Markdown>{selected.dossier}</Markdown>
+              </div>
+            )}
+          </div>
+        </details>
+      )}
+    </div>
+  )
+}
+
+function SectionLabel({ children }: { children: string }) {
+  return (
+    <h2 className="font-mono text-[11px] font-medium tracking-widest text-phosphor-dim uppercase">
+      ++ {children} ++
+    </h2>
+  )
+}
+
+function Portrait({ name, className }: { name: string; className: string }) {
+  const portrait = PORTRAITS[name]
+  return (
+    <div className={`overflow-hidden bg-panel-raised ${className}`}>
+      {portrait ? (
+        <img src={portrait} alt={name} className="h-full w-full object-cover" />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center">
+          <span className="text-glow font-display text-2xl text-phosphor-dim">{initials(name)}</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function RosterStrip({
+  profiles,
+  selectedId,
+  onSelect,
+}: {
+  profiles: Profile[]
+  selectedId: Id<'characters'>
+  onSelect: (id: Id<'characters'>) => void
+}) {
+  return (
+    <div className="flex gap-1.5">
+      {profiles.map((p) => {
+        const active = p._id === selectedId
+        return (
+          <button
+            key={p._id}
+            type="button"
+            onClick={() => onSelect(p._id)}
+            aria-label={p.name}
+            aria-pressed={active}
+            className={`min-w-0 flex-1 border transition-opacity ${
+              active ? 'border-phosphor' : 'border-phosphor-faint opacity-60 hover:opacity-100'
+            }`}
+          >
+            <Portrait name={p.name} className="aspect-square w-full" />
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function ProfileHeader({ profile, isMe }: { profile: Profile; isMe: boolean }) {
+  return (
+    <div className="hud-corners panel-raised p-3">
+      <div className="flex gap-3">
+        {/* Stretches to the height of the text column beside it. */}
+        <Portrait name={profile.name} className="min-h-28 w-28 shrink-0 self-stretch border border-phosphor-dim" />
+        <div className="flex min-w-0 flex-1 flex-col justify-center gap-1">
+          <div className="flex items-center gap-1.5 font-mono text-[9px] tracking-[0.3em] uppercase">
+            <span className="text-phosphor-dim">◊ Operator</span>
+            {profile.isGM && <span className="border border-brass px-1 text-brass">GM</span>}
+            {isMe && <span className="border border-brass px-1 text-brass">You</span>}
+          </div>
+          <span className="text-glow font-display text-xl leading-tight text-phosphor">{profile.name}</span>
+          {profile.playerRealName && (
+            <span className="truncate font-mono text-[11px] text-bone-dim">{profile.playerRealName}</span>
+          )}
+
+          {/* Compact list under the player name, same text size as it,
+              with dotted leaders running out to the numbers. */}
+          <dl className="mt-1 space-y-0.5 font-mono text-[11px] tracking-wide">
+            {[
+              { label: 'Autopsies', value: profile.autopsiesCompleted },
+              { label: 'Recovered', value: profile.itemsRecovered },
+              { label: 'Scrap', value: profile.scrap },
+              { label: 'Components', value: profile.components },
+            ].map(({ label, value }) => (
+              <div key={label} className="flex items-baseline gap-1.5 text-phosphor">
+                <dt className="uppercase">{label}</dt>
+                <span className="min-w-2 flex-1 border-b border-dotted border-phosphor-dim" aria-hidden="true" />
+                <dd className="text-glow">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
       </div>
     </div>
   )
 }
 
-function CharacterCard({ profile, isMe }: { profile: Profile; isMe: boolean }) {
-  const [tab, setTab] = useState<SubTab>('stats')
-  const portrait = PORTRAITS[profile.name]
+// Numbers are green by default; a player-applied adjustment turns one blue
+// (better than the base value) or red (worse) — which direction counts as
+// "better" depends on the stat, see StatBlock.tsx. Edit mode reveals the +/-
+// controls; only the operator themselves (or the GM) gets the Edit button.
+function StatsSection({ profile, canEdit }: { profile: Profile; canEdit: boolean }) {
+  const modRows = useQuery(api.statMods.forCharacter, { characterId: profile._id })
+  const adjust = useMutation(api.statMods.adjust)
+  const resetMods = useMutation(api.statMods.reset)
+  const [editing, setEditing] = useState(false)
 
-  return (
-    <details className="panel" open={isMe}>
-      <summary className="flex cursor-pointer list-none items-center gap-3 p-3">
-        <div className="h-12 w-12 shrink-0 overflow-hidden bg-panel-raised">
-          {portrait ? (
-            <img src={portrait} alt={profile.name} className="h-full w-full object-cover" />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center">
-              <span className="text-glow font-display text-lg text-phosphor-dim">{initials(profile.name)}</span>
-            </div>
-          )}
-        </div>
-        <span className="min-w-0 flex-1">
-          <span className="text-glow block truncate font-display text-lg text-phosphor">
-            {profile.name}
-            {isMe && <span className="ml-1.5 font-mono text-[9px] tracking-widest text-brass">YOU</span>}
-          </span>
-          {profile.playerRealName && (
-            <span className="block truncate font-mono text-[11px] text-bone-dim">{profile.playerRealName}</span>
-          )}
-        </span>
-        <span className="font-mono text-phosphor-dim">▾</span>
-      </summary>
-
-      <div className="space-y-3 border-t border-phosphor-faint p-3">
-        <TabBar
-          tabs={
-            [
-              { key: 'stats', label: 'Stats' },
-              { key: 'abilities', label: 'Abilities' },
-              { key: 'inventory', label: 'Inventory' },
-              { key: 'lore', label: 'Lore' },
-            ] as const
-          }
-          value={tab}
-          onChange={setTab}
-        />
-
-        {tab === 'stats' && <StatsTab profile={profile} />}
-        {tab === 'abilities' && <AbilitiesTab profile={profile} />}
-        {tab === 'inventory' && <InventoryTab profile={profile} />}
-        {tab === 'lore' && <LoreTab profile={profile} />}
-      </div>
-    </details>
-  )
-}
-
-function StatsTab({ profile }: { profile: Profile }) {
   const hasWeapons = profile.weapons && (profile.weapons.ranged.length > 0 || profile.weapons.melee.length > 0)
   const hasCompanions = profile.companions && profile.companions.length > 0
-  const hasCombatCard = profile.stats || hasWeapons || hasCompanions
+  const hasAnyStats = !!profile.stats || hasWeapons || hasCompanions
+
+  const modsFor = (unit: string): StatMods => modRows?.find((r) => r.unit === unit)?.deltas ?? {}
+  const hasMods = !!modRows?.some((r) => Object.values(r.deltas).some((d) => d))
+  const adjusterFor = (unit: string) =>
+    canEdit && editing
+      ? (stat: StatKey, delta: 1 | -1) => void adjust({ characterId: profile._id, unit, stat, delta })
+      : undefined
 
   return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-4 gap-1">
-        {[
-          { label: 'Autopsies', value: profile.autopsiesCompleted },
-          { label: 'Recovered', value: profile.itemsRecovered },
-          { label: 'Scrap', value: profile.scrap },
-          { label: 'Components', value: profile.components },
-        ].map(({ label, value }) => (
-          <div key={label} className="panel-raised py-1.5 text-center">
-            <div className="font-mono text-[8px] tracking-widest text-phosphor-dim uppercase">{label}</div>
-            <div className="text-glow font-display text-lg leading-none text-phosphor">{value}</div>
+    <section className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <SectionLabel>Stats</SectionLabel>
+        {canEdit && hasAnyStats && (
+          <div className="flex gap-1.5">
+            {editing && hasMods && (
+              <button
+                type="button"
+                onClick={() => void resetMods({ characterId: profile._id })}
+                className="border border-sanguine px-2 py-0.5 font-mono text-[10px] font-medium tracking-widest text-sanguine uppercase hover:bg-sanguine/10"
+              >
+                Reset
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setEditing((e) => !e)}
+              className={`border px-2 py-0.5 font-mono text-[10px] font-medium tracking-widest uppercase ${
+                editing
+                  ? 'border-phosphor bg-phosphor-faint text-phosphor'
+                  : 'border-phosphor-dim text-bone hover:border-phosphor'
+              }`}
+            >
+              {editing ? 'Done' : 'Edit'}
+            </button>
           </div>
-        ))}
+        )}
       </div>
 
-      {profile.stats && (
-        <div className="panel-raised p-3">
-          <StatsAndWeapons stats={profile.stats} weapons={profile.weapons ?? { ranged: [], melee: [] }} />
-        </div>
-      )}
-
-      {hasCompanions &&
-        profile.companions!.map((c, i) => (
-          <div key={i} className="panel-raised p-3">
-            <div className="mb-2 font-mono text-[11px] tracking-widest text-phosphor-dim uppercase">
-              ◊ Companion — {c.name}
-            </div>
-            <StatsAndWeapons stats={c.stats} weapons={c.weapons} />
-          </div>
-        ))}
-
-      {!hasCombatCard && (
-        <p className="py-6 text-center font-mono text-xs tracking-widest text-bone-dim uppercase">
+      {!hasAnyStats ? (
+        <p className="panel py-6 text-center font-mono text-xs tracking-widest text-bone-dim uppercase">
           ◊ No stat data catalogued ◊
         </p>
+      ) : (
+        <div className="space-y-3">
+          {profile.stats && (
+            <div className="panel-raised p-3">
+              <StatsAndWeapons
+                stats={profile.stats}
+                weapons={profile.weapons ?? { ranged: [], melee: [] }}
+                mods={modsFor('')}
+                onAdjust={adjusterFor('')}
+                large
+              />
+            </div>
+          )}
+
+          {hasCompanions &&
+            profile.companions!.map((c, i) => (
+              <div key={i} className="panel-raised p-3">
+                <div className="mb-2 font-mono text-[11px] tracking-widest text-phosphor-dim uppercase">
+                  ◊ Companion — {c.name}
+                </div>
+                <StatsAndWeapons
+                  stats={c.stats}
+                  weapons={c.weapons}
+                  mods={modsFor(c.name)}
+                  onAdjust={adjusterFor(c.name)}
+                  large
+                />
+              </div>
+            ))}
+        </div>
       )}
-    </div>
+    </section>
   )
 }
 
-function AbilitiesTab({ profile }: { profile: Profile }) {
+function AbilitiesSection({ profile }: { profile: Profile }) {
   const hasAbilities = profile.abilities && profile.abilities.length > 0
   const companionsWithAbilities = (profile.companions ?? []).filter(
     (c): c is Companion & { abilities: NonNullable<Companion['abilities']> } =>
@@ -156,7 +275,7 @@ function AbilitiesTab({ profile }: { profile: Profile }) {
 
   if (!hasAbilities && companionsWithAbilities.length === 0) {
     return (
-      <p className="py-6 text-center font-mono text-xs tracking-widest text-bone-dim uppercase">
+      <p className="panel py-6 text-center font-mono text-xs tracking-widest text-bone-dim uppercase">
         ◊ No abilities catalogued ◊
       </p>
     )
@@ -164,29 +283,71 @@ function AbilitiesTab({ profile }: { profile: Profile }) {
 
   return (
     <div className="space-y-3">
-      {hasAbilities && <AbilitiesList abilities={profile.abilities!} />}
+      {hasAbilities && <AbilitiesList abilities={profile.abilities!} showTitle={false} />}
       {companionsWithAbilities.map((c, i) => (
         <div key={i}>
           <div className="mb-1 font-mono text-[11px] tracking-widest text-phosphor-dim uppercase">
             ◊ Companion — {c.name}
           </div>
-          <AbilitiesList abilities={c.abilities} />
+          <AbilitiesList abilities={c.abilities} showTitle={false} />
         </div>
       ))}
     </div>
   )
 }
 
-// Scoped down from the old app-wide Reliquary Manifest (now retired — see
-// Inventory.tsx's removal) to just this operator's own recovered items.
-// Resource totals (scrap/components) already surface on the Stats tab, so
-// no separate stockpile summary is repeated here.
-function InventoryTab({ profile }: { profile: Profile }) {
+function BackpackIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M9 5.5V5a3 3 0 0 1 6 0v.5" />
+      <path d="M6 9a3.5 3.5 0 0 1 3.5-3.5h5A3.5 3.5 0 0 1 18 9v10a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2z" />
+      <path d="M9 21v-5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 16v5" />
+      <path d="M6 12H4.5M18 12h1.5M9 10h6" />
+    </svg>
+  )
+}
+
+function InventoryButton({ profile, onOpen }: { profile: Profile; onOpen: () => void }) {
   const rows = useQuery(api.inventory.listAll)
-  const setSmelted = useMutation(api.inventory.setSmelted)
+  const held = rows?.filter((r) => r.characterId === profile._id && !r.smelted).length
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="hud-corners panel flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:border-phosphor"
+    >
+      <BackpackIcon className="h-9 w-9 shrink-0 text-brass" />
+      <span className="flex-1">
+        <span className="block font-mono text-sm font-medium tracking-widest text-bone uppercase">Inventory</span>
+        <span className="block font-mono text-[11px] text-bone-dim">
+          {held === undefined ? 'Opening the pack…' : `${held} item${held === 1 ? '' : 's'} carried`}
+        </span>
+      </span>
+      <span className="font-mono text-phosphor-dim">›</span>
+    </button>
+  )
+}
+
+// Scoped down from the old app-wide Reliquary Manifest (retired) to just one
+// operator's own recovered items, laid out as a grid of square tiles — tap
+// one for its details and the smelt/restore action. Resource totals
+// (scrap/components) already surface in the profile header, so no separate
+// stockpile summary is repeated here.
+function InventoryView({ profile, onBack }: { profile: Profile; onBack: () => void }) {
+  const rows = useQuery(api.inventory.listAll)
   const [rarityFilter, setRarityFilter] = useState<Rarity | null>(null)
   const [showSmelted, setShowSmelted] = useState(false)
-  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [openId, setOpenId] = useState<string | null>(null)
 
   if (rows === undefined) return null
 
@@ -198,9 +359,24 @@ function InventoryTab({ profile }: { profile: Profile }) {
     return acc
   }, {})
   const visibleRows = rarityFilter ? baseRows.filter((r) => r.rarity === rarityFilter) : baseRows
+  const openRow = myRows.find((r) => r._id === openId) ?? null
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={onBack}
+          className="border border-phosphor-dim px-2 py-1 font-mono text-[10px] font-medium tracking-widest text-bone uppercase hover:border-phosphor"
+        >
+          ‹ Profile
+        </button>
+        <div className="flex min-w-0 items-center gap-2">
+          <BackpackIcon className="h-5 w-5 shrink-0 text-brass" />
+          <span className="text-glow truncate font-display text-lg text-phosphor">{profile.name}</span>
+        </div>
+      </div>
+
       <div className="grid grid-cols-5 gap-1">
         {RARITIES.map((r) => {
           const active = rarityFilter === r
@@ -231,85 +407,87 @@ function InventoryTab({ profile }: { profile: Profile }) {
       </button>
 
       {visibleRows.length === 0 ? (
-        <p className="panel py-6 text-center font-mono text-xs tracking-widest text-bone-dim uppercase">
-          No relics recorded
+        <p className="panel py-8 text-center font-mono text-xs tracking-widest text-bone-dim uppercase">
+          ◊ The pack is empty ◊
         </p>
       ) : (
-        <ul className="space-y-1">
-          {visibleRows.map((row) => {
-            const isExpanded = expandedId === row._id
-            const borderClass = row.smelted ? 'border-sanguine' : RARITY_BORDER[row.rarity]
-            const textClass = row.smelted ? 'text-sanguine' : RARITY_TEXT[row.rarity]
-            return (
-              <li key={row._id}>
-                <button
-                  type="button"
-                  onClick={() => setExpandedId(isExpanded ? null : row._id)}
-                  className={`flex w-full items-center gap-2 border px-2 py-1.5 text-left ${borderClass}`}
-                >
-                  <span className={`w-4 text-center text-base leading-none ${textClass}`}>
-                    {RARITY_GLYPH[row.rarity]}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className={`truncate font-mono text-sm ${textClass}`}>{row.itemName}</div>
-                    <div className="truncate font-mono text-[10px] tracking-wide text-bone-dim">{row.source}</div>
-                  </div>
-                </button>
-
-                {isExpanded && (
-                  <div className={`border border-t-0 bg-panel-raised px-3 py-3 text-sm ${borderClass}`}>
-                    <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 font-mono text-xs">
-                      <dt className="text-phosphor-dim">Rarity</dt>
-                      <dd className={`uppercase ${textClass}`}>{row.rarity}</dd>
-                      <dt className="text-phosphor-dim">Source</dt>
-                      <dd className="text-bone">{row.source}</dd>
-                      {row.smelted && (
-                        <>
-                          <dt className="text-phosphor-dim">Status</dt>
-                          <dd className="text-sanguine uppercase">
-                            Smelted — {row.smeltedScrap ?? 0} scrap, {row.smeltedComponents ?? 0} components
-                          </dd>
-                        </>
-                      )}
-                    </dl>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setSmelted({ inventoryId: row._id, smelted: !row.smelted })
-                      }}
-                      className="mt-3 w-full border border-phosphor-dim py-1.5 font-mono text-xs font-medium tracking-widest text-bone uppercase hover:border-phosphor"
-                    >
-                      {row.smelted ? 'Restore Item' : 'Smelt Item'}
-                    </button>
-                  </div>
-                )}
-              </li>
-            )
-          })}
+        <ul className="grid grid-cols-4 gap-1.5">
+          {visibleRows.map((row) => (
+            <li key={row._id}>
+              <ItemTile row={row} onOpen={() => setOpenId(row._id)} />
+            </li>
+          ))}
         </ul>
       )}
+
+      {openRow && <ItemDetail row={openRow} onClose={() => setOpenId(null)} />}
     </div>
   )
 }
 
-function LoreTab({ profile }: { profile: Profile }) {
-  if (!profile.dossier && !profile.videoId) {
-    return (
-      <p className="py-6 text-center font-mono text-xs tracking-widest text-bone-dim uppercase">
-        ◊ No dossier on file ◊
-      </p>
-    )
-  }
+function ItemTile({ row, onOpen }: { row: InventoryRow; onOpen: () => void }) {
+  const border = row.smelted ? 'border-sanguine' : RARITY_BORDER[row.rarity]
+  const text = row.smelted ? 'text-sanguine' : RARITY_TEXT[row.rarity]
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      title={row.itemName}
+      className={`panel flex aspect-square w-full flex-col items-center justify-center gap-1 border p-1 text-center transition-colors hover:bg-panel-raised ${border} ${
+        row.smelted ? 'opacity-60' : ''
+      }`}
+    >
+      <span className={`text-2xl leading-none ${text}`}>{RARITY_GLYPH[row.rarity]}</span>
+      <span className="line-clamp-2 w-full font-mono text-[9px] leading-tight break-words text-bone">
+        {row.itemName}
+      </span>
+    </button>
+  )
+}
+
+function ItemDetail({ row, onClose }: { row: InventoryRow; onClose: () => void }) {
+  const setSmelted = useMutation(api.inventory.setSmelted)
+  const border = row.smelted ? 'border-sanguine' : RARITY_BORDER[row.rarity]
+  const text = row.smelted ? 'text-sanguine' : RARITY_TEXT[row.rarity]
 
   return (
-    <div className="space-y-3">
-      {profile.videoId && <VideoLink videoId={profile.videoId} label="Dossier Trailer" />}
-      {profile.dossier && (
-        <div className="prose-lore">
-          <Markdown>{profile.dossier}</Markdown>
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 px-4" onClick={onClose}>
+      <div className={`panel-raised w-full max-w-sm border p-4 ${border}`} onClick={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex items-start gap-3">
+          <span className={`text-4xl leading-none ${text}`}>{RARITY_GLYPH[row.rarity]}</span>
+          <div className="min-w-0 flex-1">
+            <div className={`font-display text-lg leading-tight ${text}`}>{row.itemName}</div>
+            <div className={`font-mono text-[10px] tracking-widest uppercase ${text}`}>{row.rarity}</div>
+          </div>
+          <button type="button" onClick={onClose} className="font-mono text-sm text-bone-dim hover:text-bone">
+            ✕
+          </button>
         </div>
-      )}
+
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 font-mono text-xs">
+          <dt className="text-phosphor-dim">Source</dt>
+          <dd className="text-bone">{row.source}</dd>
+          {row.smelted && (
+            <>
+              <dt className="text-phosphor-dim">Status</dt>
+              <dd className="text-sanguine uppercase">
+                Smelted — {row.smeltedScrap ?? 0} scrap, {row.smeltedComponents ?? 0} components
+              </dd>
+            </>
+          )}
+        </dl>
+
+        <button
+          type="button"
+          onClick={() => {
+            setSmelted({ inventoryId: row._id, smelted: !row.smelted })
+            onClose()
+          }}
+          className="mt-4 w-full border border-phosphor-dim py-1.5 font-mono text-xs font-medium tracking-widest text-bone uppercase hover:border-phosphor"
+        >
+          {row.smelted ? 'Restore Item' : 'Smelt Item'}
+        </button>
+      </div>
     </div>
   )
 }

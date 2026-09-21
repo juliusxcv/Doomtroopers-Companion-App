@@ -330,7 +330,7 @@ function SessionShell({ identity, onLeave }: { identity: Identity; onLeave: () =
         />
       )}
       {feature === 'codex' && <Codex isGM={me.isGM} focusSlug={codexTarget} characterId={me.characterId} />}
-      {feature === 'profile' && <PlayerProfile characterId={me.characterId} />}
+      {feature === 'profile' && <PlayerProfile characterId={me.characterId} isGM={me.isGM} />}
       {feature === 'cogitator' && <Cogitator characterId={me.characterId} isGM={me.isGM} />}
       {feature === 'peril' && <Peril viewerCharacterId={me.characterId} isGM={me.isGM} />}
 

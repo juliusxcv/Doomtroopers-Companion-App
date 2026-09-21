@@ -16,6 +16,7 @@ import type * as monsters from "../monsters.js";
 import type * as perils from "../perils.js";
 import type * as resources from "../resources.js";
 import type * as sessions from "../sessions.js";
+import type * as statMods from "../statMods.js";
 
 import type {
   ApiFromModules,
@@ -32,6 +33,7 @@ declare const fullApi: ApiFromModules<{
   perils: typeof perils;
   resources: typeof resources;
   sessions: typeof sessions;
+  statMods: typeof statMods;
 }>;
 
 /**
