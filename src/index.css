@@ -81,6 +81,44 @@ body::before {
       0 0 14px color-mix(in oklab, var(--color-sanguine) 40%, transparent);
   }
 
+  /* Flags a stat changed by an active start-of-turn stance choice (see
+     src/lib/stances.ts and StatBlock.tsx's StatGrid) — a gold *outline*
+     rather than a fill, since the fill colour is still doing its normal
+     job of showing better (blue) or worse (red). paint-order keeps the
+     fill crisp on top of the stroke instead of the stroke bleeding over it. */
+  .text-outline-brass {
+    -webkit-text-stroke: 1.5px var(--color-brass);
+    paint-order: stroke fill;
+    filter: drop-shadow(0 0 3px color-mix(in oklab, var(--color-brass) 90%, transparent))
+      drop-shadow(0 0 7px color-mix(in oklab, var(--color-brass) 60%, transparent));
+  }
+
+  /* The lit-up frame around an activated ability slot (see
+     PlayerProfile.tsx's AbilitySlot) — a game-UI "hotbar" glow, same brass
+     as .text-outline-brass so the picked stance and its stat-grid overlay
+     read as the same signal. */
+  .ability-slot-active {
+    box-shadow:
+      0 0 6px color-mix(in oklab, var(--color-brass) 70%, transparent),
+      0 0 16px color-mix(in oklab, var(--color-brass) 35%, transparent);
+  }
+
+  /* Full-art ability icons (see src/lib/abilityIcons.ts) arrive as detailed
+     black/white illustrations with their own ornate border baked in, so
+     unlike the placeholder glyph they can't be recoloured via a flat
+     border/background — the slot dims or lights up the artwork itself
+     instead. Inactive: desaturated and dark, like an unpowered rune.
+     Active: warmed toward brass via sepia+hue-rotate (there's no alpha
+     channel to drive a silhouette glow, so this tints the linework itself
+     rather than haloing its edges). */
+  .ability-art-inactive {
+    filter: grayscale(1) brightness(0.5);
+    opacity: 0.55;
+  }
+  .ability-art-active {
+    filter: sepia(0.7) saturate(4) hue-rotate(-8deg) brightness(1.1);
+  }
+
   .panel {
     background: var(--color-panel);
     border: 1px solid var(--color-phosphor-faint);

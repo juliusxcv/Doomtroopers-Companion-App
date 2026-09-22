@@ -254,6 +254,19 @@ export default defineSchema({
     createdAt: v.number(),
   }).index("by_character", ["characterId"]),
 
+  // A character's currently-selected start-of-turn stance choice — ALB-XXIII's
+  // "Doctrina Imperatives" and Gideon Rook's "Skill at Arms" both work the
+  // same way: pick one named option each activation, active until the next
+  // one. `choice` is the option's name (e.g. "Aggressor"); which options
+  // exist and which carry a numeric stat delta live in src/lib/stances.ts,
+  // not here — this table only ever needs to hold whichever name was last
+  // picked. One row per character, like perilGauge.
+  activeStance: defineTable({
+    characterId: v.id("characters"),
+    choice: v.string(),
+    updatedAt: v.number(),
+  }).index("by_character", ["characterId"]),
+
   // Shared party-wide Cogitator points pool — a Convex "singleton" (one row,
   // fetched via .first()), campaign-wide like autopsyAttempts/resources but
   // with no characterId to key on since the balance itself isn't per-player.

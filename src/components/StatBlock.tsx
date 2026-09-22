@@ -5,6 +5,8 @@
 // scripts/sync-codex.mjs), just attached to a monster loadout on one side
 // and directly to a character on the other.
 
+import { ABILITY_ICONS } from '../lib/abilityIcons'
+
 // `inv` (Invulnerable save) is optional — most creatures/characters don't
 // have one; it only shows as a 7th box when present.
 export type Stats = { rc: string; cc: string; ap: string; mv: string; def: string; hp: string; inv?: string }
@@ -45,16 +47,23 @@ const TONE_CLASS = {
 } as const
 
 // Bestiary cards pass only `stats`; the Operator Profile also passes `mods`
-// (colours numbers blue/red by how the adjustment changes them) and
-// `onAdjust` (shows +/- controls under each adjustable number).
+// (colours numbers blue/red by how the adjustment changes them), `onAdjust`
+// (shows +/- controls under each adjustable number), and — for characters
+// with a start-of-turn stance pick (see src/lib/stances.ts) — `stanceMods`.
+// A stance-affected number keeps the same blue/red-for-better/worse colour
+// as a manual edit (they can both land on the same stat) and additionally
+// gets a gold outline, so the outline answers "is this temporary?" while
+// the fill colour still answers "better or worse?".
 export function StatGrid({
   stats,
   mods,
+  stanceMods,
   onAdjust,
   large = false,
 }: {
   stats: Stats
   mods?: StatMods
+  stanceMods?: StatMods
   onAdjust?: (key: StatKey, delta: 1 | -1) => void
   large?: boolean
 }) {
@@ -64,7 +73,9 @@ export function StatGrid({
       {keys.map((k) => {
         const raw = stats[k] ?? ''
         const parsed = parseStat(raw)
-        const delta = parsed ? (mods?.[k] ?? 0) : 0
+        const modDelta = parsed ? (mods?.[k] ?? 0) : 0
+        const stanceDelta = parsed ? (stanceMods?.[k] ?? 0) : 0
+        const delta = modDelta + stanceDelta
         const shown = parsed ? `${parsed.n + delta}${parsed.suffix}` : raw
         const tone = delta === 0 ? 'base' : delta > 0 !== LOWER_IS_BETTER[k] ? 'better' : 'worse'
         const canDown = !!parsed && parsed.n + delta - 1 >= STAT_FLOOR[k]
@@ -76,7 +87,13 @@ export function StatGrid({
                 +
               </StepButton>
             )}
-            <div className={`font-display ${large ? 'py-0.5 text-2xl' : 'text-lg'} ${TONE_CLASS[tone]}`}>{shown}</div>
+            <div
+              className={`font-display ${large ? 'py-0.5 text-2xl' : 'text-lg'} ${TONE_CLASS[tone]} ${
+                stanceDelta !== 0 ? 'text-outline-brass' : ''
+              }`}
+            >
+              {shown}
+            </div>
             {onAdjust && (
               <StepButton label={`Decrease ${k}`} disabled={!canDown} onClick={() => onAdjust(k, -1)}>
                 −
@@ -145,19 +162,21 @@ export function StatsAndWeapons({
   stats,
   weapons,
   mods,
+  stanceMods,
   onAdjust,
   large,
 }: {
   stats: Stats
   weapons: Weapons
   mods?: StatMods
+  stanceMods?: StatMods
   onAdjust?: (key: StatKey, delta: 1 | -1) => void
   large?: boolean
 }) {
   const hasWeapons = weapons.ranged.length > 0 || weapons.melee.length > 0
   return (
     <div className="space-y-3">
-      <StatGrid stats={stats} mods={mods} onAdjust={onAdjust} large={large} />
+      <StatGrid stats={stats} mods={mods} stanceMods={stanceMods} onAdjust={onAdjust} large={large} />
       {hasWeapons && (
         <div className="space-y-3">
           {weapons.ranged.length > 0 && <WeaponTable label="Ranged" weapons={weapons.ranged} />}
@@ -168,15 +187,57 @@ export function StatsAndWeapons({
   )
 }
 
+// Looked up by exact ability name (see src/lib/abilityIcons.ts); falls back
+// to a generic rune glyph until real per-ability art is handed over, so the
+// icon slot is already in place everywhere abilities render. `frame=false`
+// drops its own border/background for use inside a larger slot that already
+// draws one (see PlayerProfile.tsx's AbilitySlot).
+export function AbilityIcon({
+  name,
+  className = 'h-8 w-8',
+  frame = true,
+}: {
+  name: string
+  className?: string
+  frame?: boolean
+}) {
+  const src = ABILITY_ICONS[name]
+  const contentSize = frame ? 'h-3/5 w-3/5' : 'h-full w-full'
+  const content = src ? (
+    <img src={src} alt="" className={`${contentSize} object-contain`} />
+  ) : (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.25"
+      className={`${contentSize} text-phosphor-dim`}
+      aria-hidden="true"
+    >
+      <path d="M12 2 L21 7 L21 17 L12 22 L3 17 L3 7 Z" />
+      <circle cx="12" cy="12" r="2.5" />
+    </svg>
+  )
+  if (!frame) return <div className={`flex items-center justify-center ${className}`}>{content}</div>
+  return (
+    <div className={`flex shrink-0 items-center justify-center border border-phosphor-dim bg-panel-raised ${className}`}>
+      {content}
+    </div>
+  )
+}
+
 export function AbilitiesList({ abilities, showTitle = true }: { abilities: Ability[]; showTitle?: boolean }) {
   return (
     <div className="panel space-y-2 p-3">
       {showTitle && <div className="font-mono text-[11px] tracking-widest text-phosphor-dim uppercase">Abilities</div>}
-      <ul className="space-y-1.5">
+      <ul className="space-y-2.5">
         {abilities.map((a, i) => (
-          <li key={i} className="font-body text-sm text-bone-dim">
-            <span className="font-mono font-semibold text-phosphor">{a.name}</span>
-            {a.description && <span> — {a.description}</span>}
+          <li key={i} className="flex items-start gap-2.5">
+            <AbilityIcon name={a.name} />
+            <span className="font-body text-sm text-bone-dim">
+              <span className="font-mono font-semibold text-phosphor">{a.name}</span>
+              {a.description && <span> — {a.description}</span>}
+            </span>
           </li>
         ))}
       </ul>

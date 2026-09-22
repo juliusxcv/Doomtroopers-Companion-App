@@ -4,8 +4,10 @@ import Markdown from 'react-markdown'
 import { api } from '../../convex/_generated/api'
 import type { Doc, Id } from '../../convex/_generated/dataModel'
 import { RARITIES, RARITY_BORDER, RARITY_GLYPH, RARITY_TEXT, type Rarity } from '../lib/rarity'
+import { ABILITY_ICONS } from '../lib/abilityIcons'
 import { initials, PORTRAITS } from '../lib/portraits'
-import { AbilitiesList, StatsAndWeapons, type StatKey, type StatMods } from './StatBlock'
+import { STANCES } from '../lib/stances'
+import { AbilitiesList, AbilityIcon, StatsAndWeapons, type Ability, type StatKey, type StatMods } from './StatBlock'
 import { VideoLink } from './VideoLink'
 
 // Mirrors characters.listProfiles/getProfile's computed shape (roster
@@ -58,7 +60,7 @@ export function PlayerProfile({ characterId, isGM }: { characterId: Id<'characte
       <StatsSection key={selected._id} profile={selected} canEdit={isGM || selected._id === characterId} />
       <section className="space-y-2">
         <SectionLabel>Abilities</SectionLabel>
-        <AbilitiesSection profile={selected} />
+        <AbilitiesSection profile={selected} canEditStance={isGM || selected._id === characterId} />
       </section>
 
       <InventoryButton profile={selected} onOpen={() => setView('inventory')} />
@@ -186,6 +188,16 @@ function StatsSection({ profile, canEdit }: { profile: Profile; canEdit: boolean
   const resetMods = useMutation(api.statMods.reset)
   const [editing, setEditing] = useState(false)
 
+  // Only the operator's own stat block (unit "") can carry a stance choice —
+  // see src/lib/stances.ts. Skipped entirely for characters without one, so
+  // this doesn't fire an extra query for the other five roster members.
+  const stanceConfig = STANCES[profile.name]
+  const activeStanceChoice = useQuery(
+    api.stances.getChoice,
+    stanceConfig ? { characterId: profile._id } : 'skip',
+  )
+  const stanceDeltas = stanceConfig?.options.find((o) => o.name === activeStanceChoice)?.deltas
+
   const hasWeapons = profile.weapons && (profile.weapons.ranged.length > 0 || profile.weapons.melee.length > 0)
   const hasCompanions = profile.companions && profile.companions.length > 0
   const hasAnyStats = !!profile.stats || hasWeapons || hasCompanions
@@ -239,6 +251,7 @@ function StatsSection({ profile, canEdit }: { profile: Profile; canEdit: boolean
                 stats={profile.stats}
                 weapons={profile.weapons ?? { ranged: [], melee: [] }}
                 mods={modsFor('')}
+                stanceMods={stanceDeltas}
                 onAdjust={adjusterFor('')}
                 large
               />
@@ -266,7 +279,7 @@ function StatsSection({ profile, canEdit }: { profile: Profile; canEdit: boolean
   )
 }
 
-function AbilitiesSection({ profile }: { profile: Profile }) {
+function AbilitiesSection({ profile, canEditStance }: { profile: Profile; canEditStance: boolean }) {
   const hasAbilities = profile.abilities && profile.abilities.length > 0
   const companionsWithAbilities = (profile.companions ?? []).filter(
     (c): c is Companion & { abilities: NonNullable<Companion['abilities']> } =>
@@ -281,9 +294,26 @@ function AbilitiesSection({ profile }: { profile: Profile }) {
     )
   }
 
+  // For a character with a start-of-turn stance pick (ALB-XXIII, Gideon
+  // Rook — see src/lib/stances.ts), the meta-ability and each of its named
+  // options already appear as separate entries in `abilities`; the picker
+  // below absorbs and interacts with them, so they're pulled out of the
+  // plain read-only list to avoid showing the same text twice.
+  const stanceConfig = STANCES[profile.name]
+  const stanceNames = new Set(stanceConfig ? [stanceConfig.metaAbilityName, ...stanceConfig.options.map((o) => o.name)] : [])
+  const plainAbilities = (profile.abilities ?? []).filter((a) => !stanceNames.has(a.name))
+
   return (
     <div className="space-y-3">
-      {hasAbilities && <AbilitiesList abilities={profile.abilities!} showTitle={false} />}
+      {stanceConfig && profile.abilities && (
+        <StancePicker
+          characterId={profile._id}
+          config={stanceConfig}
+          abilities={profile.abilities}
+          canEdit={canEditStance}
+        />
+      )}
+      {plainAbilities.length > 0 && <AbilitiesList abilities={plainAbilities} showTitle={false} />}
       {companionsWithAbilities.map((c, i) => (
         <div key={i}>
           <div className="mb-1 font-mono text-[11px] tracking-widest text-phosphor-dim uppercase">
@@ -293,6 +323,117 @@ function AbilitiesSection({ profile }: { profile: Profile }) {
         </div>
       ))}
     </div>
+  )
+}
+
+// Lets the player (or GM) pick which named stance is active this
+// activation — ALB-XXIII's Doctrina Imperatives, Gideon Rook's Skill at
+// Arms. Unlike stat-mod editing, there's no separate "Edit" toggle: this is
+// meant to be tapped every turn, not a rare adjustment. The chosen option's
+// numeric deltas (if any) flow into StatsSection's stanceMods above.
+function StancePicker({
+  characterId,
+  config,
+  abilities,
+  canEdit,
+}: {
+  characterId: Id<'characters'>
+  config: (typeof STANCES)[string]
+  abilities: Ability[]
+  canEdit: boolean
+}) {
+  const activeChoice = useQuery(api.stances.getChoice, { characterId })
+  const setChoice = useMutation(api.stances.setChoice)
+  const descByName = new Map(abilities.map((a) => [a.name, a.description]))
+  const activeDescription = activeChoice ? descByName.get(activeChoice) : undefined
+
+  return (
+    <div className="panel space-y-3 p-3">
+      <div className="flex items-center gap-2">
+        <AbilityIcon name={config.metaAbilityName} className="h-6 w-6" />
+        <div className="font-mono text-[11px] tracking-widest text-phosphor-dim uppercase">
+          {config.metaAbilityName}
+        </div>
+      </div>
+      {descByName.get(config.metaAbilityName) && (
+        <p className="font-body text-sm text-bone-dim">{descByName.get(config.metaAbilityName)}</p>
+      )}
+      <div className="flex gap-0">
+        {config.options.map((opt) => (
+          <AbilitySlot
+            key={opt.name}
+            name={opt.name}
+            active={activeChoice === opt.name}
+            disabled={!canEdit}
+            onActivate={() => void setChoice({ characterId, choice: opt.name })}
+          />
+        ))}
+      </div>
+      {activeChoice && activeDescription && (
+        <p className="border-t border-phosphor-faint pt-2 font-body text-sm text-bone-dim">
+          <span className="font-mono font-semibold text-brass">{activeChoice}</span> — {activeDescription}
+        </p>
+      )}
+    </div>
+  )
+}
+
+// One slot in the start-of-turn ability bar — a game-UI "hotbar" icon that
+// lights up brass when it's the active choice, and sits dim/desaturated
+// otherwise, rather than a plain text pill. Works the same way regardless
+// of whether the icon behind it ends up being placeholder art or the real
+// hand-authored art, since the state treatment (dim vs. lit) lives on the
+// slot frame, not on the image itself. Sized to the real art's own
+// proportions (a tall card, not a square — see ART_ASPECT) so nothing gets
+// letterboxed inside a mismatched box; `flex-1` packs all of a character's
+// options edge-to-edge on one line rather than wrapping.
+const ART_ASPECT = '745 / 854'
+
+function AbilitySlot({
+  name,
+  active,
+  disabled,
+  onActivate,
+}: {
+  name: string
+  active: boolean
+  disabled: boolean
+  onActivate: () => void
+}) {
+  // Real art (see src/lib/abilityIcons.ts) already carries its own ornate
+  // border, so it gets dimmed/lit via CSS filter instead of the placeholder
+  // glyph's border+background frame — see .ability-art-* in index.css.
+  const hasArt = !!ABILITY_ICONS[name]
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      aria-pressed={active}
+      onClick={onActivate}
+      className="group flex min-w-0 flex-1 flex-col items-center gap-1 disabled:cursor-not-allowed"
+    >
+      <div
+        style={{ aspectRatio: ART_ASPECT }}
+        className={
+          hasArt
+            ? `w-full transition-all duration-150 ${active ? 'ability-slot-active ability-art-active' : 'ability-art-inactive'}`
+            : `hud-corners flex w-full items-center justify-center border p-3 transition-all duration-150 ${
+                active
+                  ? 'ability-slot-active border-brass bg-brass/10'
+                  : 'border-phosphor-faint bg-panel-raised opacity-50 grayscale group-enabled:group-hover:opacity-80 group-enabled:group-hover:grayscale-0'
+              }`
+        }
+      >
+        <AbilityIcon name={name} className="h-full w-full" frame={false} />
+      </div>
+      <span
+        className={`truncate text-center font-mono text-[9px] leading-tight tracking-widest uppercase ${
+          active ? 'text-brass' : 'text-bone-dim'
+        }`}
+      >
+        {name}
+      </span>
+    </button>
   )
 }
 
