@@ -282,6 +282,17 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_character", ["characterId"]),
 
+  // A character's on/off ability flag — Isabella Alderidge's Master
+  // Tactician Tac marker ("place it at the beginning of your activation").
+  // The app has no board position to place it on, so this just tracks
+  // whether it's currently deployed as a play reminder — see
+  // src/lib/abilityToggles.ts. One row per character, like activeStance.
+  abilityToggle: defineTable({
+    characterId: v.id("characters"),
+    active: v.boolean(),
+    updatedAt: v.number(),
+  }).index("by_character", ["characterId"]),
+
   // Shared party-wide Cogitator points pool — a Convex "singleton" (one row,
   // fetched via .first()), campaign-wide like autopsyAttempts/resources but
   // with no characterId to key on since the balance itself isn't per-player.

@@ -6,9 +6,11 @@ import type { Doc, Id } from '../../convex/_generated/dataModel'
 import { RARITIES, RARITY_BORDER, RARITY_GLYPH, RARITY_TEXT, type Rarity } from '../lib/rarity'
 import { ABILITY_ICONS } from '../lib/abilityIcons'
 import { ABILITY_RESOURCES } from '../lib/abilityResources'
+import { ABILITY_TOGGLES } from '../lib/abilityToggles'
 import { initials, PORTRAITS } from '../lib/portraits'
 import { STANCES } from '../lib/stances'
 import { AbilitiesList, AbilityIcon, StatsAndWeapons, type Ability, type StatKey, type StatMods } from './StatBlock'
+import { Peril } from './Peril'
 import { VideoLink } from './VideoLink'
 
 // Mirrors characters.listProfiles/getProfile's computed shape (roster
@@ -29,7 +31,7 @@ type InventoryRow = Doc<'inventory'>
 export function PlayerProfile({ characterId, isGM }: { characterId: Id<'characters'>; isGM: boolean }) {
   const profiles = useQuery(api.characters.listProfiles)
   const [selectedId, setSelectedId] = useState<Id<'characters'>>(characterId)
-  const [view, setView] = useState<'profile' | 'inventory'>('profile')
+  const [view, setView] = useState<'profile' | 'inventory' | 'peril'>('profile')
 
   if (profiles === undefined) return null
 
@@ -44,6 +46,11 @@ export function PlayerProfile({ characterId, isGM }: { characterId: Id<'characte
   if (view === 'inventory') {
     return <InventoryView profile={selected} onBack={() => setView('profile')} />
   }
+  if (view === 'peril') {
+    return <PerilView characterId={characterId} isGM={isGM} onBack={() => setView('profile')} />
+  }
+
+  const canEdit = isGM || selected._id === characterId
 
   return (
     <div className="space-y-4">
@@ -58,11 +65,15 @@ export function PlayerProfile({ characterId, isGM }: { characterId: Id<'characte
 
       <ProfileHeader profile={selected} isMe={selected._id === characterId} />
 
-      <StatsSection key={selected._id} profile={selected} canEdit={isGM || selected._id === characterId} />
+      <StatsSection key={selected._id} profile={selected} canEdit={canEdit} />
       <section className="space-y-2">
         <SectionLabel>Abilities</SectionLabel>
-        <AbilitiesSection profile={selected} canEditAbility={isGM || selected._id === characterId} />
+        <AbilitiesSection profile={selected} canEditAbility={canEdit} />
       </section>
+
+      {/* Only Vexilia herself (and the GM, for oversight) has any use for
+          this — every other operator's card never shows it. */}
+      {selected.name === 'Vexilia Thornkell' && canEdit && <PerilButton onOpen={() => setView('peril')} />}
 
       <InventoryButton profile={selected} onOpen={() => setView('inventory')} />
 
@@ -311,17 +322,20 @@ function AbilitiesSection({ profile, canEditAbility }: { profile: Profile; canEd
   }
 
   // For a character with a start-of-turn stance pick (ALB-XXIII, Gideon
-  // Rook — see src/lib/stances.ts) or an accruing resource (Helbrecht,
-  // Slabs — see src/lib/abilityResources.ts), the meta-ability and each of
-  // its named options/tiers already appear as separate entries in
-  // `abilities`; the interactive widget below absorbs them, so they're
-  // pulled out of the plain read-only list to avoid showing the same text
-  // twice.
+  // Rook, Isabella — see src/lib/stances.ts), an accruing resource
+  // (Helbrecht, Slabs — see src/lib/abilityResources.ts), or an on/off flag
+  // (Isabella's Tac marker — see src/lib/abilityToggles.ts), the
+  // meta-ability and each of its named options/tiers already appear as
+  // separate entries in `abilities`; the interactive widget below absorbs
+  // them, so they're pulled out of the plain read-only list to avoid
+  // showing the same text twice.
   const stanceConfig = STANCES[profile.name]
   const resourceConfig = ABILITY_RESOURCES[profile.name]
+  const toggleConfig = ABILITY_TOGGLES[profile.name]
   const consumedNames = new Set([
     ...(stanceConfig ? [stanceConfig.metaAbilityName, ...stanceConfig.options.map((o) => o.name)] : []),
     ...(resourceConfig ? [resourceConfig.metaAbilityName, ...resourceConfig.spendOptions.map((o) => o.name)] : []),
+    ...(toggleConfig ? [toggleConfig.metaAbilityName] : []),
   ])
   const plainAbilities = (profile.abilities ?? []).filter((a) => !consumedNames.has(a.name))
 
@@ -339,6 +353,14 @@ function AbilitiesSection({ profile, canEditAbility }: { profile: Profile; canEd
         <ResourceTracker
           characterId={profile._id}
           config={resourceConfig}
+          abilities={profile.abilities}
+          canEdit={canEditAbility}
+        />
+      )}
+      {toggleConfig && profile.abilities && (
+        <ToggleTracker
+          characterId={profile._id}
+          config={toggleConfig}
           abilities={profile.abilities}
           canEdit={canEditAbility}
         />
@@ -375,7 +397,8 @@ function StancePicker({
   const activeChoice = useQuery(api.stances.getChoice, { characterId })
   const setChoice = useMutation(api.stances.setChoice)
   const descByName = new Map(abilities.map((a) => [a.name, a.description]))
-  const activeDescription = activeChoice ? descByName.get(activeChoice) : undefined
+  const activeOption = config.options.find((o) => o.name === activeChoice)
+  const activeDescription = activeOption?.description ?? (activeChoice ? descByName.get(activeChoice) : undefined)
 
   return (
     <div className="panel space-y-3 p-3">
@@ -555,6 +578,53 @@ function AbilitySlot({
   )
 }
 
+// A single on/off flag for an ability with no numbers or menu attached —
+// Isabella's Master Tactician Tac marker. One tap flips it; the lit/dim
+// treatment matches AbilitySlot's active state (glow-brass-box + border) so
+// it reads as the same "this is active" language as the other trackers.
+function ToggleTracker({
+  characterId,
+  config,
+  abilities,
+  canEdit,
+}: {
+  characterId: Id<'characters'>
+  config: (typeof ABILITY_TOGGLES)[string]
+  abilities: Ability[]
+  canEdit: boolean
+}) {
+  const active = useQuery(api.abilityToggles.getActive, { characterId }) ?? false
+  const setActive = useMutation(api.abilityToggles.setActive)
+  const descByName = new Map(abilities.map((a) => [a.name, a.description]))
+
+  return (
+    <div className="panel space-y-3 p-3">
+      <div className="flex items-center gap-2">
+        <AbilityIcon name={config.metaAbilityName} className="h-6 w-6" />
+        <div className="font-mono text-[11px] tracking-widest text-phosphor-dim uppercase">
+          {config.metaAbilityName}
+        </div>
+      </div>
+      {descByName.get(config.metaAbilityName) && (
+        <p className="font-body text-sm text-bone-dim">{descByName.get(config.metaAbilityName)}</p>
+      )}
+      <button
+        type="button"
+        disabled={!canEdit}
+        aria-pressed={active}
+        onClick={() => void setActive({ characterId, active: !active })}
+        className={`w-full border py-2 font-mono text-[11px] font-medium tracking-widest uppercase transition-colors disabled:cursor-not-allowed ${
+          active
+            ? 'glow-brass-box border-brass bg-brass/10 text-brass'
+            : 'border-phosphor-dim text-bone hover:border-phosphor disabled:hover:border-phosphor-dim'
+        }`}
+      >
+        {active ? config.onLabel : config.offLabel}
+      </button>
+    </div>
+  )
+}
+
 function BackpackIcon({ className }: { className?: string }) {
   return (
     <svg
@@ -594,6 +664,49 @@ function InventoryButton({ profile, onOpen }: { profile: Profile; onOpen: () => 
       </span>
       <span className="font-mono text-phosphor-dim">›</span>
     </button>
+  )
+}
+
+// Same visual treatment the Peril tile used to have on the Main Menu, before
+// it moved onto Vexilia's own Operator Profile card (where only she or the
+// GM ever see it — see the caller).
+function PerilButton({ onOpen }: { onOpen: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="peril-scene peril-panel hud-corners flex w-full items-center gap-3 px-4 py-3 text-left transition-colors"
+    >
+      <span className="peril-warp-glow font-display text-2xl">Ѫ</span>
+      <span className="flex-1">
+        <span className="peril-warp-text block font-mono text-sm font-medium tracking-widest uppercase">Peril</span>
+        <span className="block font-mono text-[11px] text-bone-dim">The warp strains against Vexilia's will.</span>
+      </span>
+      <span className="peril-warp-text-dim font-mono">›</span>
+    </button>
+  )
+}
+
+function PerilView({
+  characterId,
+  isGM,
+  onBack,
+}: {
+  characterId: Id<'characters'>
+  isGM: boolean
+  onBack: () => void
+}) {
+  return (
+    <div className="space-y-3">
+      <button
+        type="button"
+        onClick={onBack}
+        className="border border-phosphor-dim px-2 py-1 font-mono text-[10px] font-medium tracking-widest text-bone uppercase hover:border-phosphor"
+      >
+        ‹ Profile
+      </button>
+      <Peril viewerCharacterId={characterId} isGM={isGM} />
+    </div>
   )
 }
 

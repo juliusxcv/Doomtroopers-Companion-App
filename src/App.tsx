@@ -5,7 +5,6 @@ import type { Id } from '../convex/_generated/dataModel'
 import { Autopsy } from './components/Autopsy'
 import { Codex } from './components/Codex'
 import { Cogitator } from './components/Cogitator'
-import { Peril } from './components/Peril'
 import { PlayerProfile } from './components/PlayerProfile'
 import { StyleGuide } from './components/StyleGuide'
 import { TabBar } from './components/TabBar'
@@ -247,7 +246,7 @@ function JoinSessionForm({ onJoined }: { onJoined: (identity: Identity) => void 
   )
 }
 
-type Feature = 'menu' | 'autopsy' | 'codex' | 'profile' | 'cogitator' | 'peril'
+type Feature = 'menu' | 'autopsy' | 'codex' | 'profile' | 'cogitator'
 type Player = { _id: Id<'players'>; characterName: string; isGM: boolean }
 
 function SessionShell({ identity, onLeave }: { identity: Identity; onLeave: () => void }) {
@@ -316,9 +315,7 @@ function SessionShell({ identity, onLeave }: { identity: Identity; onLeave: () =
         </div>
       </div>
 
-      {feature === 'menu' && (
-        <MainMenu onSelect={goToFeature} showPeril={me.characterName === 'Vexilia Thornkell' || me.isGM} />
-      )}
+      {feature === 'menu' && <MainMenu onSelect={goToFeature} />}
       {feature === 'autopsy' && (
         <Autopsy
           characterId={me.characterId}
@@ -332,7 +329,6 @@ function SessionShell({ identity, onLeave }: { identity: Identity; onLeave: () =
       {feature === 'codex' && <Codex isGM={me.isGM} focusSlug={codexTarget} characterId={me.characterId} />}
       {feature === 'profile' && <PlayerProfile characterId={me.characterId} isGM={me.isGM} />}
       {feature === 'cogitator' && <Cogitator characterId={me.characterId} isGM={me.isGM} />}
-      {feature === 'peril' && <Peril viewerCharacterId={me.characterId} isGM={me.isGM} />}
 
       {profileOpen && (
         <ProfileModal
@@ -352,18 +348,13 @@ function SessionShell({ identity, onLeave }: { identity: Identity; onLeave: () =
 // the Cogitator Scanner are the two things a player needs to find fastest
 // each session, so they get matching oversized "primary objective" tiles up
 // top. Codex is secondary reference material, one tier down. Operator,
-// Inventory, and Stat Cards used to live here too, but each had a more
-// natural home elsewhere — see OperatorAvatarButton (header), PlayerProfile
-// (Inventory tab), and Autopsy's MonsterVisual (Stat Card on the specimen
-// photo) — so the main menu itself only routes to things worth a dedicated
-// screen of their own.
-function MainMenu({
-  onSelect,
-  showPeril,
-}: {
-  onSelect: (feature: Feature) => void
-  showPeril: boolean
-}) {
+// Inventory, Stat Cards, and Peril used to live here too, but each had a
+// more natural home elsewhere — see OperatorAvatarButton (header),
+// PlayerProfile (Inventory tab and, for Vexilia specifically, the Peril
+// button — see its own comment there), and Autopsy's MonsterVisual (Stat
+// Card on the specimen photo) — so the main menu itself only routes to
+// things worth a dedicated screen of their own.
+function MainMenu({ onSelect }: { onSelect: (feature: Feature) => void }) {
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-3">
@@ -393,25 +384,6 @@ function MainMenu({
         </span>
         <span className="font-mono text-phosphor-dim">›</span>
       </button>
-
-      {/* Only Vexilia herself (and the GM, for oversight) can trigger a Peril
-          check — every other operator has no use for this screen. */}
-      {showPeril && (
-        <button
-          type="button"
-          onClick={() => onSelect('peril')}
-          className="peril-scene peril-panel hud-corners flex w-full items-center gap-3 px-4 py-3 text-left transition-colors"
-        >
-          <span className="peril-warp-glow font-display text-2xl">Ѫ</span>
-          <span className="flex-1">
-            <span className="peril-warp-text block font-mono text-sm font-medium tracking-widest uppercase">
-              Peril
-            </span>
-            <span className="block font-mono text-[11px] text-bone-dim">The warp strains against Vexilia's will.</span>
-          </span>
-          <span className="peril-warp-text-dim font-mono">›</span>
-        </button>
-      )}
     </div>
   )
 }
