@@ -315,7 +315,7 @@ function SessionShell({ identity, onLeave }: { identity: Identity; onLeave: () =
         </div>
       </div>
 
-      {feature === 'menu' && <MainMenu onSelect={goToFeature} />}
+      {feature === 'menu' && <MainMenu onSelect={goToFeature} characterName={me.characterName} />}
       {feature === 'autopsy' && (
         <Autopsy
           characterId={me.characterId}
@@ -344,20 +344,26 @@ function SessionShell({ identity, onLeave }: { identity: Identity; onLeave: () =
   )
 }
 
-// Weighted deliberately, not a flat list of equally-sized rows: Autopsy and
-// the Cogitator Scanner are the two things a player needs to find fastest
-// each session, so they get matching oversized "primary objective" tiles up
-// top. Codex is secondary reference material, one tier down. Operator,
-// Inventory, Stat Cards, and Peril used to live here too, but each had a
-// more natural home elsewhere — see OperatorAvatarButton (header),
-// PlayerProfile (Inventory tab and, for Vexilia specifically, the Peril
-// button — see its own comment there), and Autopsy's MonsterVisual (Stat
-// Card on the specimen photo) — so the main menu itself only routes to
-// things worth a dedicated screen of their own.
-function MainMenu({ onSelect }: { onSelect: (feature: Feature) => void }) {
+// Autopsy, Scanner, and Codex are the three things worth a dedicated screen
+// of their own, given equal billing as a row of matching tiles — Codex used
+// to be a full-width row of its own, weighted as secondary reference
+// material, but reads better as a peer of the two "objective" tiles than as
+// a lesser one below them. The big Operator tile beneath is the fastest way
+// to your own stat sheet, front and center rather than tucked into the
+// header. Inventory, Stat Cards, and Peril used to live here too, but each
+// had a more natural home elsewhere — see PlayerProfile (Inventory tab and,
+// for Vexilia specifically, the Peril button — see its own comment there)
+// and Autopsy's MonsterVisual (Stat Card on the specimen photo).
+function MainMenu({
+  onSelect,
+  characterName,
+}: {
+  onSelect: (feature: Feature) => void
+  characterName: string
+}) {
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-3 gap-2">
         <PrimaryModuleTile
           glyph="Ψ"
           label="Autopsy"
@@ -370,20 +376,10 @@ function MainMenu({ onSelect }: { onSelect: (feature: Feature) => void }) {
           sublabel="Cogitator Uplink"
           onClick={() => onSelect('cogitator')}
         />
+        <PrimaryModuleTile glyph="⌘" label="Codex" sublabel="Lore Archive" onClick={() => onSelect('codex')} />
       </div>
 
-      <button
-        type="button"
-        onClick={() => onSelect('codex')}
-        className="hud-corners panel flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:border-phosphor"
-      >
-        <span className="text-glow font-display text-2xl text-brass">⌘</span>
-        <span className="flex-1">
-          <span className="block font-mono text-sm font-medium tracking-widest text-bone uppercase">Codex</span>
-          <span className="block font-mono text-[11px] text-bone-dim">Archive of unlocked lore.</span>
-        </span>
-        <span className="font-mono text-phosphor-dim">›</span>
-      </button>
+      <OperatorShortcutTile name={characterName} onClick={() => onSelect('profile')} />
     </div>
   )
 }
@@ -403,18 +399,50 @@ function PrimaryModuleTile({
     <button
       type="button"
       onClick={onClick}
-      className="hud-corners panel-raised flex aspect-[4/5] flex-col items-center justify-center gap-2 px-2 py-4 text-center transition-colors hover:border-phosphor"
+      className="hud-corners panel-raised flex aspect-[4/5] flex-col items-center justify-center gap-1.5 px-1 py-3 text-center transition-colors hover:border-phosphor"
     >
-      <span className="text-glow font-display text-5xl text-phosphor">{glyph}</span>
-      <span className="text-glow font-display text-lg tracking-wide text-phosphor uppercase">{label}</span>
-      <span className="font-mono text-[9px] tracking-[0.2em] text-phosphor-dim uppercase">{sublabel}</span>
+      <span className="text-glow font-display text-3xl text-phosphor">{glyph}</span>
+      <span className="text-glow font-display text-sm tracking-wide text-phosphor uppercase">{label}</span>
+      <span className="font-mono text-[8px] leading-tight tracking-[0.15em] text-phosphor-dim uppercase">
+        {sublabel}
+      </span>
     </button>
   )
 }
 
-// Stands in for the main menu's old "Operator Profile" row — a persistent
-// header button, since it's the one screen (your own dossier) worth
-// reaching from anywhere, not just the menu.
+// The big, featured shortcut to your own stat sheet on the main menu —
+// portrait-led rather than a glyph tile since it's a specific person, not a
+// module. OperatorAvatarButton below is the small always-present sibling in
+// the header, for reaching your profile from any other screen too.
+function OperatorShortcutTile({ name, onClick }: { name: string; onClick: () => void }) {
+  const portrait = PORTRAITS[name]
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="hud-corners panel-raised flex w-full items-center gap-4 p-3 text-left transition-colors hover:border-phosphor"
+    >
+      <span className="h-20 w-20 shrink-0 overflow-hidden border border-phosphor-dim">
+        {portrait ? (
+          <img src={portrait} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <span className="flex h-full w-full items-center justify-center bg-panel-raised font-display text-2xl text-phosphor-dim">
+            {initials(name)}
+          </span>
+        )}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-mono text-[9px] tracking-[0.3em] text-phosphor-dim uppercase">◊ Operator</span>
+        <span className="text-glow block truncate font-display text-xl text-phosphor">{name}</span>
+        <span className="block font-mono text-[11px] text-bone-dim">View Stat Sheet</span>
+      </span>
+      <span className="font-mono text-phosphor-dim">›</span>
+    </button>
+  )
+}
+
+// A persistent header button, since it's the one screen (your own dossier)
+// worth reaching from anywhere, not just the menu.
 function OperatorAvatarButton({
   name,
   active,
