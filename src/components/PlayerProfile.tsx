@@ -387,7 +387,7 @@ function StancePicker({
 // proportions (a tall card, not a square — see ART_ASPECT) so nothing gets
 // letterboxed inside a mismatched box; `flex-1` packs all of a character's
 // options edge-to-edge on one line rather than wrapping.
-const ART_ASPECT = '745 / 854'
+const ART_ASPECT = '400 / 459'
 
 function AbilitySlot({
   name,
