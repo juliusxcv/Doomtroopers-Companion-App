@@ -5,6 +5,7 @@ import { api } from '../../convex/_generated/api'
 import type { Doc, Id } from '../../convex/_generated/dataModel'
 import { RARITIES, RARITY_BORDER, RARITY_GLYPH, RARITY_TEXT, type Rarity } from '../lib/rarity'
 import { ABILITY_ICONS } from '../lib/abilityIcons'
+import { ABILITY_RESOURCES } from '../lib/abilityResources'
 import { initials, PORTRAITS } from '../lib/portraits'
 import { STANCES } from '../lib/stances'
 import { AbilitiesList, AbilityIcon, StatsAndWeapons, type Ability, type StatKey, type StatMods } from './StatBlock'
@@ -60,7 +61,7 @@ export function PlayerProfile({ characterId, isGM }: { characterId: Id<'characte
       <StatsSection key={selected._id} profile={selected} canEdit={isGM || selected._id === characterId} />
       <section className="space-y-2">
         <SectionLabel>Abilities</SectionLabel>
-        <AbilitiesSection profile={selected} canEditStance={isGM || selected._id === characterId} />
+        <AbilitiesSection profile={selected} canEditAbility={isGM || selected._id === characterId} />
       </section>
 
       <InventoryButton profile={selected} onOpen={() => setView('inventory')} />
@@ -294,7 +295,7 @@ function StatsSection({ profile, canEdit }: { profile: Profile; canEdit: boolean
   )
 }
 
-function AbilitiesSection({ profile, canEditStance }: { profile: Profile; canEditStance: boolean }) {
+function AbilitiesSection({ profile, canEditAbility }: { profile: Profile; canEditAbility: boolean }) {
   const hasAbilities = profile.abilities && profile.abilities.length > 0
   const companionsWithAbilities = (profile.companions ?? []).filter(
     (c): c is Companion & { abilities: NonNullable<Companion['abilities']> } =>
@@ -310,13 +311,19 @@ function AbilitiesSection({ profile, canEditStance }: { profile: Profile; canEdi
   }
 
   // For a character with a start-of-turn stance pick (ALB-XXIII, Gideon
-  // Rook — see src/lib/stances.ts), the meta-ability and each of its named
-  // options already appear as separate entries in `abilities`; the picker
-  // below absorbs and interacts with them, so they're pulled out of the
-  // plain read-only list to avoid showing the same text twice.
+  // Rook — see src/lib/stances.ts) or an accruing resource (Helbrecht,
+  // Slabs — see src/lib/abilityResources.ts), the meta-ability and each of
+  // its named options/tiers already appear as separate entries in
+  // `abilities`; the interactive widget below absorbs them, so they're
+  // pulled out of the plain read-only list to avoid showing the same text
+  // twice.
   const stanceConfig = STANCES[profile.name]
-  const stanceNames = new Set(stanceConfig ? [stanceConfig.metaAbilityName, ...stanceConfig.options.map((o) => o.name)] : [])
-  const plainAbilities = (profile.abilities ?? []).filter((a) => !stanceNames.has(a.name))
+  const resourceConfig = ABILITY_RESOURCES[profile.name]
+  const consumedNames = new Set([
+    ...(stanceConfig ? [stanceConfig.metaAbilityName, ...stanceConfig.options.map((o) => o.name)] : []),
+    ...(resourceConfig ? [resourceConfig.metaAbilityName, ...resourceConfig.spendOptions.map((o) => o.name)] : []),
+  ])
+  const plainAbilities = (profile.abilities ?? []).filter((a) => !consumedNames.has(a.name))
 
   return (
     <div className="space-y-3">
@@ -325,7 +332,15 @@ function AbilitiesSection({ profile, canEditStance }: { profile: Profile; canEdi
           characterId={profile._id}
           config={stanceConfig}
           abilities={profile.abilities}
-          canEdit={canEditStance}
+          canEdit={canEditAbility}
+        />
+      )}
+      {resourceConfig && profile.abilities && (
+        <ResourceTracker
+          characterId={profile._id}
+          config={resourceConfig}
+          abilities={profile.abilities}
+          canEdit={canEditAbility}
         />
       )}
       {plainAbilities.length > 0 && <AbilitiesList abilities={plainAbilities} showTitle={false} />}
@@ -389,6 +404,94 @@ function StancePicker({
           <span className="font-mono font-semibold text-brass">{activeChoice}</span> — {activeDescription}
         </p>
       )}
+    </div>
+  )
+}
+
+// Lets the player (or GM) track an accruing points resource that's gained
+// from something the app can't see (a turn starting, a die landing on 6 —
+// see src/lib/abilityResources.ts) and spent on a small menu of effects.
+// "+1" and the spend buttons are always visible but disabled without
+// canEdit/affordability, matching StancePicker's convention.
+function ResourceTracker({
+  characterId,
+  config,
+  abilities,
+  canEdit,
+}: {
+  characterId: Id<'characters'>
+  config: (typeof ABILITY_RESOURCES)[string]
+  abilities: Ability[]
+  canEdit: boolean
+}) {
+  const value = useQuery(api.abilityResources.getValue, { characterId }) ?? 0
+  const gain = useMutation(api.abilityResources.gain)
+  const spend = useMutation(api.abilityResources.spend)
+  const clearPoints = useMutation(api.abilityResources.clear)
+  const descByName = new Map(abilities.map((a) => [a.name, a.description]))
+  const atCap = config.cap !== undefined && value >= config.cap
+
+  return (
+    <div className="panel space-y-3 p-3">
+      <div className="flex items-center gap-2">
+        <AbilityIcon name={config.metaAbilityName} className="h-6 w-6" />
+        <div className="font-mono text-[11px] tracking-widest text-phosphor-dim uppercase">
+          {config.metaAbilityName}
+        </div>
+      </div>
+      {descByName.get(config.metaAbilityName) && (
+        <p className="font-body text-sm text-bone-dim">{descByName.get(config.metaAbilityName)}</p>
+      )}
+
+      <div className="flex items-center justify-center gap-4">
+        <span className="text-glow font-display text-3xl text-phosphor">
+          {value}
+          {config.cap !== undefined && <span className="text-xl text-phosphor-dim"> / {config.cap}</span>}
+        </span>
+      </div>
+
+      <div className="flex gap-1.5">
+        <button
+          type="button"
+          disabled={!canEdit || atCap}
+          onClick={() => void gain({ characterId, cap: config.cap })}
+          className="flex-1 border border-phosphor-dim py-1.5 font-mono text-[11px] font-medium tracking-widest text-bone uppercase hover:border-phosphor disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          +1 {config.resourceLabel}
+        </button>
+        {config.manualClear && (
+          <button
+            type="button"
+            disabled={!canEdit || value === 0}
+            onClick={() => void clearPoints({ characterId })}
+            className="border border-sanguine px-3 py-1.5 font-mono text-[11px] font-medium tracking-widest text-sanguine uppercase hover:bg-sanguine/10 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+
+      <div className="space-y-1.5 border-t border-phosphor-faint pt-2">
+        {config.spendOptions.map((opt) => {
+          const description = opt.description ?? descByName.get(opt.name)
+          const canAfford = value >= opt.cost
+          return (
+            <button
+              key={opt.name}
+              type="button"
+              disabled={!canEdit || !canAfford}
+              onClick={() => void spend({ characterId, cost: opt.cost })}
+              className="flex w-full items-start gap-2 border border-phosphor-faint px-2 py-1.5 text-left transition-colors hover:border-phosphor disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-phosphor-faint"
+            >
+              <span className="shrink-0 font-mono text-xs font-semibold text-brass">{opt.cost}</span>
+              <span className="font-body text-xs text-bone-dim">
+                <span className="font-mono font-semibold text-phosphor">{opt.name}</span>
+                {description && <span> — {description}</span>}
+              </span>
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }

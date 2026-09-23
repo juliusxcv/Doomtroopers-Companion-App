@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as abilityResources from "../abilityResources.js";
 import type * as characters from "../characters.js";
 import type * as codex from "../codex.js";
 import type * as cogitatorPoints from "../cogitatorPoints.js";
@@ -26,6 +27,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  abilityResources: typeof abilityResources;
   characters: typeof characters;
   codex: typeof codex;
   cogitatorPoints: typeof cogitatorPoints;

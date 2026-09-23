@@ -267,6 +267,21 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_character", ["characterId"]),
 
+  // A character's currently-accumulated ability-resource points — Helbrecht
+  // Nullis's Faith (gained at the start of each activation, capped at 5)
+  // and Slabs's Wrecka (gained per 6 rolled while shooting/fighting/
+  // retaliating, no cap, lost after an activation with no attack). Both are
+  // gained from things that happen at the table (a turn starting, a die
+  // landing on 6) that the app can't detect on its own, so gaining is a
+  // manual "+1" tap rather than something computed here — see
+  // src/lib/abilityResources.ts for which character has which resource,
+  // its cap, and its spend menu. One row per character, like activeStance.
+  abilityResource: defineTable({
+    characterId: v.id("characters"),
+    value: v.number(),
+    updatedAt: v.number(),
+  }).index("by_character", ["characterId"]),
+
   // Shared party-wide Cogitator points pool — a Convex "singleton" (one row,
   // fetched via .first()), campaign-wide like autopsyAttempts/resources but
   // with no characterId to key on since the balance itself isn't per-player.
