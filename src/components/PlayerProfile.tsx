@@ -240,9 +240,17 @@ function StatsSection({ profile, canEdit }: { profile: Profile; canEdit: boolean
         )}
       </div>
 
-      {stanceAffectsStats && (
-        <p className="text-center font-mono text-[11px] font-semibold tracking-[0.3em] text-brass uppercase">
-          {activeStanceChoice}
+      {/* Always rendered (never conditionally mounted) so its line height is
+          reserved whether or not a skill is currently affecting a stat —
+          otherwise the grid below jumps up/down every time the active
+          choice changes. */}
+      {stanceConfig && (
+        <p
+          className={`text-center font-mono text-[11px] font-semibold tracking-[0.3em] text-brass uppercase ${
+            stanceAffectsStats ? '' : 'invisible'
+          }`}
+        >
+          {stanceAffectsStats ? activeStanceChoice : ' '}
         </p>
       )}
 
