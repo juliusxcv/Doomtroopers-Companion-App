@@ -52,8 +52,9 @@ const TONE_CLASS = {
 // with a start-of-turn stance pick (see src/lib/stances.ts) — `stanceMods`.
 // A stance-affected number keeps the same blue/red-for-better/worse colour
 // as a manual edit (they can both land on the same stat) and additionally
-// gets a gold outline, so the outline answers "is this temporary?" while
-// the fill colour still answers "better or worse?".
+// gets a brass box around the whole cell (label included), so the box
+// answers "is this temporary, and why?" while the fill colour still answers
+// "better or worse?".
 export function StatGrid({
   stats,
   mods,
@@ -79,21 +80,25 @@ export function StatGrid({
         const shown = parsed ? `${parsed.n + delta}${parsed.suffix}` : raw
         const tone = delta === 0 ? 'base' : delta > 0 !== LOWER_IS_BETTER[k] ? 'better' : 'worse'
         const canDown = !!parsed && parsed.n + delta - 1 >= STAT_FLOOR[k]
+        const flagged = stanceDelta !== 0
         return (
-          <div key={k} className="flex flex-col items-center">
-            <div className="font-mono text-[9px] tracking-widest text-phosphor-dim uppercase">{k}</div>
+          <div
+            key={k}
+            className={`flex flex-col items-center rounded-sm border px-0.5 py-1 ${
+              flagged ? 'glow-brass-box border-brass bg-brass/10' : 'border-transparent'
+            }`}
+          >
+            <div
+              className={`font-mono text-[9px] tracking-widest uppercase ${flagged ? 'text-brass' : 'text-phosphor-dim'}`}
+            >
+              {k}
+            </div>
             {onAdjust && (
               <StepButton label={`Increase ${k}`} disabled={!parsed} onClick={() => onAdjust(k, 1)}>
                 +
               </StepButton>
             )}
-            <div
-              className={`font-display ${large ? 'py-0.5 text-2xl' : 'text-lg'} ${TONE_CLASS[tone]} ${
-                stanceDelta !== 0 ? 'text-outline-brass' : ''
-              }`}
-            >
-              {shown}
-            </div>
+            <div className={`font-display ${large ? 'py-0.5 text-2xl' : 'text-lg'} ${TONE_CLASS[tone]}`}>{shown}</div>
             {onAdjust && (
               <StepButton label={`Decrease ${k}`} disabled={!canDown} onClick={() => onAdjust(k, -1)}>
                 −

@@ -197,6 +197,7 @@ function StatsSection({ profile, canEdit }: { profile: Profile; canEdit: boolean
     stanceConfig ? { characterId: profile._id } : 'skip',
   )
   const stanceDeltas = stanceConfig?.options.find((o) => o.name === activeStanceChoice)?.deltas
+  const stanceAffectsStats = !!stanceDeltas && Object.values(stanceDeltas).some((d) => d)
 
   const hasWeapons = profile.weapons && (profile.weapons.ranged.length > 0 || profile.weapons.melee.length > 0)
   const hasCompanions = profile.companions && profile.companions.length > 0
@@ -238,6 +239,12 @@ function StatsSection({ profile, canEdit }: { profile: Profile; canEdit: boolean
           </div>
         )}
       </div>
+
+      {stanceAffectsStats && (
+        <p className="text-center font-mono text-[11px] font-semibold tracking-[0.3em] text-brass uppercase">
+          {activeStanceChoice}
+        </p>
+      )}
 
       {!hasAnyStats ? (
         <p className="panel py-6 text-center font-mono text-xs tracking-widest text-bone-dim uppercase">
@@ -416,10 +423,10 @@ function AbilitySlot({
         style={{ aspectRatio: ART_ASPECT }}
         className={
           hasArt
-            ? `w-full transition-all duration-150 ${active ? 'ability-slot-active ability-art-active' : 'ability-art-inactive'}`
+            ? `w-full transition-all duration-150 ${active ? 'glow-brass-box ability-art-active' : 'ability-art-inactive'}`
             : `hud-corners flex w-full items-center justify-center border p-3 transition-all duration-150 ${
                 active
-                  ? 'ability-slot-active border-brass bg-brass/10'
+                  ? 'glow-brass-box border-brass bg-brass/10'
                   : 'border-phosphor-faint bg-panel-raised opacity-50 grayscale group-enabled:group-hover:opacity-80 group-enabled:group-hover:grayscale-0'
               }`
         }

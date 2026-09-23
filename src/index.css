@@ -81,23 +81,12 @@ body::before {
       0 0 14px color-mix(in oklab, var(--color-sanguine) 40%, transparent);
   }
 
-  /* Flags a stat changed by an active start-of-turn stance choice (see
-     src/lib/stances.ts and StatBlock.tsx's StatGrid) — a gold *outline*
-     rather than a fill, since the fill colour is still doing its normal
-     job of showing better (blue) or worse (red). paint-order keeps the
-     fill crisp on top of the stroke instead of the stroke bleeding over it. */
-  .text-outline-brass {
-    -webkit-text-stroke: 1.5px var(--color-brass);
-    paint-order: stroke fill;
-    filter: drop-shadow(0 0 3px color-mix(in oklab, var(--color-brass) 90%, transparent))
-      drop-shadow(0 0 7px color-mix(in oklab, var(--color-brass) 60%, transparent));
-  }
-
-  /* The lit-up frame around an activated ability slot (see
-     PlayerProfile.tsx's AbilitySlot) — a game-UI "hotbar" glow, same brass
-     as .text-outline-brass so the picked stance and its stat-grid overlay
-     read as the same signal. */
-  .ability-slot-active {
+  /* Shared brass "lit up" box glow — the activated ability slot (see
+     PlayerProfile.tsx's AbilitySlot) and a stat cell currently changed by
+     an active skill (see StatBlock.tsx's StatGrid) both pair this with
+     border-brass bg-brass/10, so the picked stance and its stat-grid
+     effect read as the same signal. */
+  .glow-brass-box {
     box-shadow:
       0 0 6px color-mix(in oklab, var(--color-brass) 70%, transparent),
       0 0 16px color-mix(in oklab, var(--color-brass) 35%, transparent);
