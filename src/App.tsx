@@ -283,7 +283,7 @@ function SessionShell({ identity, onLeave }: { identity: Identity; onLeave: () =
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-1 flex-col space-y-4">
       <div className="flex items-center justify-between gap-2">
         {feature === 'menu' ? (
           <span className="font-mono text-[10px] tracking-[0.3em] text-phosphor-dim uppercase">
@@ -362,7 +362,7 @@ function MainMenu({
   characterName: string
 }) {
   return (
-    <div className="space-y-3">
+    <div className="flex flex-1 flex-col gap-3">
       <div className="grid grid-cols-3 gap-2">
         <PrimaryModuleTile
           glyph="Ψ"
@@ -420,23 +420,30 @@ function OperatorShortcutTile({ name, onClick }: { name: string; onClick: () => 
     <button
       type="button"
       onClick={onClick}
-      className="hud-corners panel-raised flex w-full items-center gap-4 p-3 text-left transition-colors hover:border-phosphor"
+      className="hud-corners panel-raised relative flex w-full flex-1 items-end overflow-hidden text-left transition-colors hover:border-phosphor"
     >
-      <span className="h-20 w-20 shrink-0 overflow-hidden border border-phosphor-dim">
-        {portrait ? (
-          <img src={portrait} alt="" className="h-full w-full object-cover" />
-        ) : (
-          <span className="flex h-full w-full items-center justify-center bg-panel-raised font-display text-2xl text-phosphor-dim">
-            {initials(name)}
-          </span>
-        )}
+      {/* Full-bleed background portrait, filling whatever height flex-1
+          gives this tile — a plain img rather than a bounded box, since the
+          point is for it to read as the tile's background, not an inset
+          avatar. `z-0` keeps it under hud-corners' corner-bracket ::before
+          (painted at the button's own base layer) instead of covering it. */}
+      {portrait ? (
+        <img src={portrait} alt="" className="absolute inset-0 z-0 h-full w-full object-cover" />
+      ) : (
+        <span className="absolute inset-0 z-0 flex items-center justify-center font-display text-6xl text-phosphor-dim">
+          {initials(name)}
+        </span>
+      )}
+      {/* Scrim so the name/label stay legible over any portrait. */}
+      <span className="absolute inset-0 z-0 bg-gradient-to-t from-ink via-ink/50 to-transparent" />
+      <span className="relative z-10 flex w-full items-center justify-between gap-2 p-4">
+        <span className="min-w-0">
+          <span className="block font-mono text-[9px] tracking-[0.3em] text-phosphor-dim uppercase">◊ Operator</span>
+          <span className="text-glow block truncate font-display text-2xl text-phosphor">{name}</span>
+          <span className="block font-mono text-[11px] text-bone-dim">View Stat Sheet</span>
+        </span>
+        <span className="font-mono text-phosphor-dim">›</span>
       </span>
-      <span className="min-w-0 flex-1">
-        <span className="block font-mono text-[9px] tracking-[0.3em] text-phosphor-dim uppercase">◊ Operator</span>
-        <span className="text-glow block truncate font-display text-xl text-phosphor">{name}</span>
-        <span className="block font-mono text-[11px] text-bone-dim">View Stat Sheet</span>
-      </span>
-      <span className="font-mono text-phosphor-dim">›</span>
     </button>
   )
 }
