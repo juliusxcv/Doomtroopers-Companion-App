@@ -1519,17 +1519,13 @@ export function CogitatorScanner({ characterId, isGM, onExit, onRestart }: Props
 
 /* --------------------------- Checkpoint ring HUD --------------------------- */
 
-// Stage 1 sits at 12 o'clock; the next 10 stages wrap clockwise around the
-// scope's outer rim. Once the player pushes past that page of 11, the ring
-// re-pages to the next block (12-22, 23-33, ...) — same layout, just the
-// next 11 lattice numbers and whichever of them are checkpoints.
+// A "Lattice 00" start marker sits at 12 o'clock — not a real stage, just
+// the ring's origin point — and the page's 11 real stages wrap clockwise
+// from there. Once the player pushes past that page of 11, the ring re-pages
+// to the next block (12-22, 23-33, ...) — same layout, just the next 11
+// lattice numbers and whichever of them are checkpoints.
 const RING_PAGE_SIZE = 11
-// Ticks are spaced as if there were RING_PAGE_SIZE+1 of them around the
-// circle, but only RING_PAGE_SIZE are real — the extra slot is left empty
-// right before 12 o'clock. That gives the lead-in progress arc for the
-// page's first tick a dedicated, non-overlapping start point (see `segments`
-// below) instead of it landing exactly on the last tick's position, and
-// doubles as a visible seam marking the page boundary.
+// Slots = the start marker + the 11 real ticks, evenly spaced.
 const RING_SLOT_COUNT = RING_PAGE_SIZE + 1
 /** Marker + label sit just outside the scope's visible border (radius SIZE/2). */
 const RING_MARKER_R = SIZE / 2
@@ -1541,18 +1537,19 @@ const RING_SEGMENT_ARC_LEN = RING_MARKER_R * ((Math.PI * 2) / RING_SLOT_COUNT)
 function CircularCheckpointRing({ stage, percentGreen }: { stage: number; percentGreen: number }) {
   const pageStart = Math.floor((stage - 1) / RING_PAGE_SIZE) * RING_PAGE_SIZE + 1
   const stages = Array.from({ length: RING_PAGE_SIZE }, (_, i) => pageStart + i)
-  const ringPoint = (i: number) => {
-    const angle = -Math.PI / 2 + (i / RING_SLOT_COUNT) * Math.PI * 2
+  const ringPoint = (slot: number) => {
+    const angle = -Math.PI / 2 + (slot / RING_SLOT_COUNT) * Math.PI * 2
     return { x: CENTER + RING_MARKER_R * Math.cos(angle), y: CENTER + RING_MARKER_R * Math.sin(angle) }
   }
-  const markerPoints = stages.map((_, i) => ringPoint(i))
+  const startPoint = ringPoint(0)
+  // Real stage i sits one slot clockwise of the start marker, so stage 1
+  // lands where slot 1 is, not on the start marker itself.
+  const markerPoints = stages.map((_, i) => ringPoint(i + 1))
   // One "progress into this tick" segment per tick, including the page's
-  // very first one — that lead-in comes from a virtual point one gap
-  // counter-clockwise of 12 o'clock (there's no earlier real tick to start
-  // from), so the loading-bar fill still has somewhere to grow from on the
-  // stage you're actually on when it's the first tick of the page.
+  // very first one, which leads in from the start marker itself — a real,
+  // labeled origin instead of a phantom "lattice 0" hanging off to the side.
   const segments = stages.map((s, i) => ({
-    from: i === 0 ? ringPoint(-1) : markerPoints[i - 1],
+    from: i === 0 ? startPoint : markerPoints[i - 1],
     to: markerPoints[i],
     targetStage: s,
   }))
@@ -1591,9 +1588,25 @@ function CircularCheckpointRing({ stage, percentGreen }: { stage: number; percen
           )
         })}
       </svg>
+      {/* Lattice 00 — the ring's fixed origin marker, not a real stage. */}
+      <div
+        title="Lattice 00 — start"
+        className="absolute h-2 w-2 rounded-full border border-phosphor-dim/40"
+        style={{ left: startPoint.x, top: startPoint.y, transform: 'translate(-50%, -50%)' }}
+      />
+      <span
+        className="absolute text-[8px] tabular-nums text-phosphor-dim/50"
+        style={{
+          left: CENTER + RING_LABEL_R * Math.cos(-Math.PI / 2),
+          top: CENTER + RING_LABEL_R * Math.sin(-Math.PI / 2),
+          transform: 'translate(-50%, -50%)',
+        }}
+      >
+        00
+      </span>
       {stages.map((s, i) => {
         const { x, y } = markerPoints[i]
-        const angle = -Math.PI / 2 + (i / RING_SLOT_COUNT) * Math.PI * 2
+        const angle = -Math.PI / 2 + ((i + 1) / RING_SLOT_COUNT) * Math.PI * 2
         const cos = Math.cos(angle)
         const sin = Math.sin(angle)
         const isCp = isCheckpointStage(s)
