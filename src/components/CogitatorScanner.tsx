@@ -1527,8 +1527,10 @@ export function CogitatorScanner({ characterId, isGM, onExit, onRestart }: Props
 const RING_PAGE_SIZE = 11
 // Slots = the start marker + the 11 real ticks, evenly spaced.
 const RING_SLOT_COUNT = RING_PAGE_SIZE + 1
-/** Marker + label sit just outside the scope's visible border (radius SIZE/2). */
-const RING_MARKER_R = SIZE / 2
+/** Marker + label sit just inside the scope's visible border (radius SIZE/2)
+ * rather than right on it — pulled in so the label ring's horizontal extent
+ * (widest at the 03/09 ticks) doesn't get clipped on narrow mobile widths. */
+const RING_MARKER_R = SIZE / 2 - 30
 const RING_LABEL_R = RING_MARKER_R + 13
 /** Arc length of one tick-to-tick slot (all slots are equal angle) — used as
  * the stroke-dasharray/dashoffset unit for the fill-progress trick below. */
