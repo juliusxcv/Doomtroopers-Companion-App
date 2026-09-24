@@ -1705,59 +1705,62 @@ interface UpgradeStripProps {
 function UpgradeStrip({ data, pendingPoints, bankedPoints, upgrades, pendingUpgrade, onOvercharge, onFortify, onCounter, onRepair }: UpgradeStripProps) {
   void upgrades
   return (
-    <div className="mt-3 flex w-full max-w-[480px] flex-wrap items-center justify-center gap-2 border border-phosphor-dim/50 bg-ink/70 px-3 py-2">
-      <div className="mr-1 flex items-baseline gap-1.5 border-r border-phosphor-dim/40 pr-3">
-        <span className="text-[10px] uppercase tracking-[0.25em] text-phosphor-dim">data</span>
-        <span className="text-glow font-display text-base leading-none tabular-nums text-phosphor">{data}</span>
+    <div className="mt-3 flex w-full max-w-[480px] flex-col gap-2 border border-phosphor-dim/50 bg-ink/70 px-3 py-2">
+      {/* Row 1 — DATA (the resource upgrades actually spend) sits with the
+          upgrade buttons so this row never has to wrap around anything
+          else. PTS/BNKD PTS are meta progression, not gameplay currency, so
+          they get their own row below instead of competing for space here. */}
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        <div className="mr-1 flex items-baseline gap-1.5 border-r border-phosphor-dim/40 pr-3">
+          <span className="text-[10px] uppercase tracking-[0.25em] text-phosphor-dim">data</span>
+          <span className="text-glow font-display text-base leading-none tabular-nums text-phosphor">{data}</span>
+        </div>
+        <UpgradeButton
+          label="OVRC"
+          cost={UPGRADE_COSTS.overcharge}
+          disabled={data < UPGRADE_COSTS.overcharge}
+          armed={pendingUpgrade === 'overcharge'}
+          onClick={onOvercharge}
+          title={`Arm: tap a green node to make it emit 2× dots for 10s — ${UPGRADE_COSTS.overcharge} data`}
+        />
+        <UpgradeButton
+          label="FORT"
+          cost={UPGRADE_COSTS.fortify}
+          disabled={data < UPGRADE_COSTS.fortify}
+          armed={pendingUpgrade === 'fortify'}
+          onClick={onFortify}
+          title={`Arm: tap a green node to add a 20HP shield — ${UPGRADE_COSTS.fortify} data`}
+        />
+        <UpgradeButton
+          label="CNTR"
+          cost={UPGRADE_COSTS.counterEmit}
+          disabled={data < UPGRADE_COSTS.counterEmit}
+          armed={pendingUpgrade === 'counter'}
+          onClick={onCounter}
+          title={`Arm: tap a green node to fire a shockwave that annihilates red dots — ${UPGRADE_COSTS.counterEmit} data`}
+        />
+        <UpgradeButton
+          label="RPR"
+          cost={UPGRADE_COSTS.repair}
+          disabled={data < UPGRADE_COSTS.repair}
+          armed={pendingUpgrade === 'repair'}
+          onClick={onRepair}
+          title={`Arm: tap a green node to repair it to full HP — ${UPGRADE_COSTS.repair} data`}
+        />
       </div>
-      <div className="mr-1 flex flex-col justify-center gap-1 border-r border-phosphor-dim/40 pr-3">
+      {/* Row 2 — Cogitator points (meta progression, not spendable in-run). */}
+      <div className="flex items-center justify-center gap-4 border-t border-phosphor-dim/30 pt-2">
         <div className="flex items-baseline gap-1.5" title="Unbanked Cogitator points — lost if this run ends before the next checkpoint">
           <span className="text-[10px] uppercase tracking-[0.25em] text-phosphor-dim">pts</span>
           <span className="text-glow font-display text-base leading-none tabular-nums text-phosphor">{Math.floor(pendingPoints)}</span>
         </div>
         {bankedPoints > 0 && (
           <div className="flex items-baseline gap-1.5" title="Cogitator points already banked to the party pool this run">
-            <span className="font-mono text-[7px] leading-tight font-bold uppercase tracking-[0.15em] text-brass">
-              bnkd
-              <br />
-              pts
-            </span>
+            <span className="font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-brass">bnkd pts</span>
             <span className="text-glow font-display text-base leading-none tabular-nums text-brass">{Math.floor(bankedPoints)}</span>
           </div>
         )}
       </div>
-      <UpgradeButton
-        label="OVRC"
-        cost={UPGRADE_COSTS.overcharge}
-        disabled={data < UPGRADE_COSTS.overcharge}
-        armed={pendingUpgrade === 'overcharge'}
-        onClick={onOvercharge}
-        title={`Arm: tap a green node to make it emit 2× dots for 10s — ${UPGRADE_COSTS.overcharge} data`}
-      />
-      <UpgradeButton
-        label="FORT"
-        cost={UPGRADE_COSTS.fortify}
-        disabled={data < UPGRADE_COSTS.fortify}
-        armed={pendingUpgrade === 'fortify'}
-        onClick={onFortify}
-        title={`Arm: tap a green node to add a 20HP shield — ${UPGRADE_COSTS.fortify} data`}
-      />
-      <UpgradeButton
-        label="CNTR"
-        cost={UPGRADE_COSTS.counterEmit}
-        disabled={data < UPGRADE_COSTS.counterEmit}
-        armed={pendingUpgrade === 'counter'}
-        onClick={onCounter}
-        title={`Arm: tap a green node to fire a shockwave that annihilates red dots — ${UPGRADE_COSTS.counterEmit} data`}
-      />
-      <UpgradeButton
-        label="RPR"
-        cost={UPGRADE_COSTS.repair}
-        disabled={data < UPGRADE_COSTS.repair}
-        armed={pendingUpgrade === 'repair'}
-        onClick={onRepair}
-        title={`Arm: tap a green node to repair it to full HP — ${UPGRADE_COSTS.repair} data`}
-      />
     </div>
   )
 }
