@@ -11,15 +11,6 @@ import { cogitatorRunPoints, type RunResult } from '../lib/scoring'
 // palette instead of the old app's raw rgba literals) were adapted. See
 // D:\Projects\40K\repos\cogitator-calibrator\src\components\CogitatorScanner.tsx.
 
-export type Difficulty = 'acolyte' | 'techpriest' | 'magos'
-
-/** Cogitator-specific difficulty labels: roman tier numerals. */
-const COG_DIFF_LABELS: Record<Difficulty, string> = {
-  acolyte: 'Lvl-I',
-  techpriest: 'Lvl-II',
-  magos: 'Lvl-III',
-}
-
 const randInt = (a: number, b: number) => Math.floor(a + Math.random() * (b - a + 1))
 
 const SIZE = 460
@@ -28,12 +19,10 @@ const FIELD_RADIUS = 210
 const NODE_MAX_HP = 10
 
 interface Props {
-  difficulty: Difficulty
   characterId: Id<'characters'>
   isGM: boolean
   onExit: () => void
   onRestart?: () => void
-  onChangeDifficulty?: (d: Difficulty) => void
 }
 
 /** Max shield HP applied by Fortify. Drained before node HP. */
@@ -45,6 +34,9 @@ const SHOCKWAVE_MS = 900
 const SHOCKWAVE_MAX_R = 220
 /** Band thickness used for collision with red particles (px). */
 const SHOCKWAVE_BAND = 14
+/** Checkpoint-bank victory burst: expansion duration & max radius (px). */
+const CHECKPOINT_BURST_MS = 1100
+const CHECKPOINT_BURST_MAX_R = FIELD_RADIUS + 20
 
 // This app's theme tokens (src/index.css) as literal oklch strings — canvas
 // 2D fillStyle/strokeStyle needs real color strings, not CSS var() refs.
@@ -91,6 +83,17 @@ const UPGRADE_COSTS = {
   repair: 10,
 } as const
 
+// Points-banking checkpoints. Clearing one of these stages flushes all
+// pendingPoints accumulated since the previous checkpoint (or run start) to
+// the shared party pool; exiting, restarting, or failing between checkpoints
+// forfeits that unbanked total instead. Lines up with the tier labels below
+// (novice ends at 2, adept — and the stage-5 difficulty wall — at 5, magos
+// at 9), then every 5 stages beyond.
+function isCheckpointStage(stage: number): boolean {
+  if (stage === 2 || stage === 5 || stage === 9) return true
+  return stage > 9 && (stage - 9) % 5 === 0
+}
+
 interface Edge {
   a: number
   b: number
@@ -122,8 +125,6 @@ interface LevelDef {
   startRed: number
   /** average extra edges per node beyond MST spine */
   extraEdges: number
-  /** ms required to flip a red node to green by hovering */
-  hackMs: number
   /** cap of in-flight attack dots per node */
   emitCap: number
   /** ms between emissions per node when allowed */
@@ -132,32 +133,37 @@ interface LevelDef {
   dotSpeed: number
   /** number of shielded neutral (blue) nodes guarding the center */
   neutralCount: number
-  /** ms required to break a neutral node's shield via reticle hover */
-  shieldMs: number
 }
 
-function levelFor(stage: number, difficulty: Difficulty): LevelDef {
-  const diffMul = difficulty === 'acolyte' ? 1 : difficulty === 'techpriest' ? 0.85 : 0.7
-  // Higher difficulty → more hostile footholds from the start.
-  const diffRedBonus = difficulty === 'acolyte' ? 0 : difficulty === 'techpriest' ? 1 : 2
-  // Higher difficulty also slightly trims player footholds at upper stages.
-  const diffGreenPenalty = difficulty === 'magos' && stage >= 4 ? 1 : 0
+function levelFor(stage: number): LevelDef {
+  // Global hardness multiplier, now tied to depth instead of a player-picked
+  // difficulty — stages 1-4 play at the old "acolyte" tuning, 5-9 step up to
+  // "techpriest", 10+ to "magos". Nobody chooses this; it just ramps as you
+  // go deeper, same as everything else in this curve.
+  const diffMul = stage < 5 ? 1 : stage < 10 ? 0.85 : 0.7
+  // More hostile footholds from the start as the tier climbs.
+  const diffRedBonus = stage < 5 ? 0 : stage < 10 ? 1 : 2
 
   // Larger, more complex lattices — randomized within a band so no two
-  // stages of the same number look identical.
-  const baseCount = stage === 1 ? 5 : stage === 2 ? 7 : Math.min(18, 6 + stage + Math.floor(stage / 3))
+  // stages of the same number look identical. Cap raised from 18 to 24 (hit
+  // around stage 14 instead of stage 9) so the lattice keeps growing well
+  // past the stage-5 wall instead of flatlining right after it.
+  const baseCount = stage === 1 ? 5 : stage === 2 ? 7 : Math.min(24, 6 + stage + Math.floor(stage / 3))
   const count = Math.max(4, baseCount + randInt(-1, 2))
 
   // Asymmetric footholds: early stages favor green (red is at a disadvantage),
   // mid stages equalize, late stages flip and put green at a disadvantage.
+  // startGreen bottoms out at 1 by design (stage 5) — that's the floor, not
+  // a plateau, since the player always needs at least one seed node.
   const baseGreen = stage <= 2 ? 3 : stage <= 4 ? 2 : 1
-  const startGreen = Math.max(1, baseGreen - diffGreenPenalty)
-  const baseRed = stage <= 1 ? 1 : stage <= 2 ? 1 : stage <= 3 ? 2 : stage <= 4 ? 2 : stage <= 6 ? 3 : stage <= 8 ? 4 : 5
+  const startGreen = baseGreen
+  // Red footholds kept climbing to a hard cap of 5 by stage 9 (old formula);
+  // now eases toward a cap of 9, reached around stage 16, so the red side
+  // keeps getting more dangerous well beyond the stage-5 spike.
+  const baseRed = stage <= 1 ? 1 : stage <= 2 ? 1 : stage <= 3 ? 2 : stage <= 4 ? 2 : Math.min(9, 3 + Math.floor((stage - 4) / 2))
   const startRed = baseRed + diffRedBonus + (stage >= 3 ? randInt(0, 1) : 0)
 
   // Faster hacking early — reticle feels powerful, then tightens up.
-  const earlyHackBoost = stage === 1 ? 0.55 : stage === 2 ? 0.7 : stage === 3 ? 0.85 : 1
-  // Reds emit much slower & in lower volume on stages 1–2 so the player can learn.
   const earlyEmitMul = stage === 1 ? 2.2 : stage === 2 ? 1.6 : stage === 3 ? 1.2 : 1
   const earlyCapPenalty = stage === 1 ? 2 : stage === 2 ? 1 : 0
 
@@ -165,8 +171,9 @@ function levelFor(stage: number, difficulty: Difficulty): LevelDef {
   const extraEdgesBase = Math.min(4, Math.floor(stage / 2))
   const extraEdges = extraEdgesBase + randInt(0, 2 + Math.floor(stage / 4))
 
-  // Neutral shielded cluster — varies in size from stage to stage.
-  const neutralBase = stage <= 1 ? 0 : stage <= 3 ? 1 : Math.min(6, Math.floor(stage / 2) + 1)
+  // Neutral shielded cluster — varies in size from stage to stage. Cap
+  // raised from 6 to 9 (reached ~stage 16) to match the extended red ramp.
+  const neutralBase = stage <= 1 ? 0 : stage <= 3 ? 1 : Math.min(9, Math.floor(stage / 2) + 1)
   const neutralCount = Math.max(0, neutralBase + (stage >= 2 ? randInt(-1, 1) : 0))
 
   return {
@@ -174,18 +181,16 @@ function levelFor(stage: number, difficulty: Difficulty): LevelDef {
     startGreen,
     startRed,
     extraEdges,
-    hackMs: Math.max(2200, 4400 - stage * 110) * earlyHackBoost * (difficulty === 'magos' ? 1.25 : 1),
     emitCap: Math.max(1, 3 + Math.floor(stage / 2) - earlyCapPenalty),
     emitInterval: Math.max(380, 900 - stage * 50) * diffMul * earlyEmitMul,
     dotSpeed: (0.00018 + stage * 0.00002) / diffMul,
     neutralCount,
-    shieldMs: Math.max(2800, 4200 - stage * 100) * (difficulty === 'magos' ? 1.25 : 1),
   }
 }
 
 // Build a node graph that fits inside FIELD_RADIUS.
-function buildLevel(stage: number, difficulty: Difficulty) {
-  const def = levelFor(stage, difficulty)
+function buildLevel(stage: number) {
+  const def = levelFor(stage)
   const nodes: NodeNet[] = []
 
   const makeNode = (x: number, y: number, side: 'red' | 'green' | 'neutral'): NodeNet => ({
@@ -331,7 +336,7 @@ function buildLevel(stage: number, difficulty: Difficulty) {
   return { nodes, edges, def, adjacency }
 }
 
-export function CogitatorScanner({ difficulty, characterId, isGM, onExit, onRestart, onChangeDifficulty }: Props) {
+export function CogitatorScanner({ characterId, isGM, onExit, onRestart }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const rafRef = useRef<number | null>(null)
   const award = useMutation(api.cogitatorPoints.award)
@@ -346,6 +351,20 @@ export function CogitatorScanner({ difficulty, characterId, isGM, onExit, onRest
   const [upgrades, setUpgrades] = useState<UpgradeState>({ counterEmit: false })
   const [repairCooldown, setRepairCooldown] = useState(0)
   void repairCooldown
+  // Cogitator points earned this run but not yet banked to the party pool —
+  // lost entirely if the run ends (exit/restart/failure) before the next
+  // checkpoint stage clears.
+  const [pendingPoints, setPendingPoints] = useState(0)
+  // Gates [esc]/restart behind a confirm step whenever doing so would
+  // forfeit unbanked pendingPoints.
+  const [confirmAction, setConfirmAction] = useState<{ type: 'exit' } | { type: 'restart' } | null>(null)
+  // Victory overlay shown for a couple seconds whenever a checkpoint stage
+  // clears and its pendingPoints actually bank — bigger deal than an
+  // ordinary stage clear, so it gets its own beat instead of just cutting
+  // straight to the next lattice's "++ NODE LATTICE NN ++" banner.
+  const [checkpointCelebration, setCheckpointCelebration] = useState<{ amount: number } | null>(null)
+  // Expanding brass rings drawn from the field center on a checkpoint bank.
+  const checkpointBurstRef = useRef<{ t0: number }[]>([])
 
   // Currently selected green node (player tap selection).
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null)
@@ -382,10 +401,12 @@ export function CogitatorScanner({ difficulty, characterId, isGM, onExit, onRest
     data: number
     upgrades: UpgradeState
     repairCooldownMs: number
+    pendingPoints: number
   }>({
     data: 0,
     upgrades: { counterEmit: false },
     repairCooldownMs: 0,
+    pendingPoints: 0,
   })
 
   // Game world state (re-built on stage change)
@@ -409,7 +430,7 @@ export function CogitatorScanner({ difficulty, characterId, isGM, onExit, onRest
     nodes: [],
     edges: [],
     adjacency: [],
-    def: levelFor(1, difficulty),
+    def: levelFor(1),
     particles: [],
     lastTs: 0,
     elapsed: 0,
@@ -425,10 +446,10 @@ export function CogitatorScanner({ difficulty, characterId, isGM, onExit, onRest
   const NODE_RADIUS = 14
   const HOVER_RADIUS = NODE_RADIUS + 8
 
-  // Build level whenever stage or difficulty changes.
+  // Build level whenever stage changes.
   const initStage = useCallback(
     (n: number) => {
-      const built = buildLevel(n, difficulty)
+      const built = buildLevel(n)
       const initialGreen = built.nodes.filter((nd) => nd.side === 'green').length
       const initialPct = built.nodes.length > 0 ? Math.round((initialGreen / built.nodes.length) * 100) : 0
       // Stage 1 = fresh run → wipe data + upgrades.
@@ -437,10 +458,12 @@ export function CogitatorScanner({ difficulty, characterId, isGM, onExit, onRest
           data: 0,
           upgrades: { counterEmit: false },
           repairCooldownMs: 0,
+          pendingPoints: 0,
         }
         setData(0)
         setUpgrades({ counterEmit: false })
         setRepairCooldown(0)
+        setPendingPoints(0)
       }
       worldRef.current = {
         nodes: built.nodes,
@@ -468,7 +491,7 @@ export function CogitatorScanner({ difficulty, characterId, isGM, onExit, onRest
       setStageBanner(`++ NODE LATTICE ${String(n).padStart(2, '0')} ++`)
       window.setTimeout(() => setStageBanner(null), 1400)
     },
-    [difficulty],
+    [],
   )
 
   useEffect(() => {
@@ -931,21 +954,41 @@ export function CogitatorScanner({ difficulty, characterId, isGM, onExit, onRest
             efficiency,
             setbacks: w.lostNodes,
           }
-          // Award shared Cogitator points for clearing the stage — never for
-          // the GM's own character (server also re-enforces this).
+          // Stage points accumulate in pendingPoints, un-banked, until a
+          // checkpoint stage clears. Tracked and previewed (timeline,
+          // celebration) even for the GM's own character, same as a real
+          // player would see — only the actual server award() is skipped for
+          // GM (server also re-enforces this), so a GM playtest can see the
+          // whole checkpoint flow without banking fake points to the party.
           const bridge = runBridgeRef.current
-          if (!bridge.isGM) {
-            const points = cogitatorRunPoints(runResult)
-            void bridge.award({ characterId: bridge.characterId, amount: points, reason: `cogitator-lvl-${w.stage}` })
+          let banked = false
+          const points = cogitatorRunPoints(runResult)
+          runRef.current.pendingPoints += points
+          if (isCheckpointStage(w.stage) && runRef.current.pendingPoints > 0) {
+            const amount = runRef.current.pendingPoints
+            runRef.current.pendingPoints = 0
+            banked = true
+            if (!bridge.isGM) {
+              void bridge.award({ characterId: bridge.characterId, amount, reason: `cogitator-checkpoint-${w.stage}` })
+            }
+            const burstNow = performance.now()
+            checkpointBurstRef.current.push({ t0: burstNow }, { t0: burstNow + 150 }, { t0: burstNow + 300 })
+            setCheckpointCelebration({ amount })
+            window.setTimeout(() => setCheckpointCelebration(null), 2000)
           }
+          setPendingPoints(runRef.current.pendingPoints)
+          window.setTimeout(
+            () => {
+              setStage((s) => s + 1)
+            },
+            banked ? 2200 : 1200,
+          )
         }
-        window.setTimeout(() => {
-          setStage((s) => s + 1)
-        }, 1200)
       } else if (!w.completed && !w.failed && total > 0 && greenCount === 0) {
         w.failed = true
         setFailed(true)
-        setStageBanner('++ COGITATOR LOST ++')
+        const forfeited = Math.floor(runRef.current.pendingPoints)
+        setStageBanner(forfeited > 0 ? `++ COGITATOR LOST · ${forfeited} PTS FORFEITED ++` : '++ COGITATOR LOST ++')
         w.reported = true
       }
 
@@ -1191,6 +1234,25 @@ export function CogitatorScanner({ difficulty, characterId, isGM, onExit, onRest
         ctx.stroke()
         ctx.restore()
       }
+
+      // ---------- Checkpoint-bank victory burst (expanding brass rings from center) ----------
+      checkpointBurstRef.current = checkpointBurstRef.current.filter((b) => ts - b.t0 < CHECKPOINT_BURST_MS)
+      for (const b of checkpointBurstRef.current) {
+        const age = ts - b.t0
+        if (age < 0) continue
+        const t = age / CHECKPOINT_BURST_MS
+        const r = t * CHECKPOINT_BURST_MAX_R
+        ctx.save()
+        ctx.strokeStyle = brass(0.9 * (1 - t))
+        ctx.lineWidth = 3
+        ctx.shadowColor = brass(0.9)
+        ctx.shadowBlur = 16
+        ctx.beginPath()
+        ctx.arc(CENTER, CENTER, Math.max(0, r), 0, Math.PI * 2)
+        ctx.stroke()
+        ctx.restore()
+      }
+
       fortBadgesRef.current = fortBadgesRef.current.filter((b) => b.until > ts)
       for (const b of fortBadgesRef.current) {
         ctx.save()
@@ -1275,6 +1337,27 @@ export function CogitatorScanner({ difficulty, characterId, isGM, onExit, onRest
 
   const formatTime = (ms: number) => `${(Math.floor(ms / 100) / 10).toFixed(1)}s`
 
+  // Runs the requested action directly, or — if it would forfeit unbanked
+  // pendingPoints — parks it behind the confirm banner instead.
+  const guardAction = useCallback(
+    (action: { type: 'exit' } | { type: 'restart' }) => {
+      if (runRef.current.pendingPoints > 0) {
+        setConfirmAction(action)
+        return
+      }
+      if (action.type === 'exit') onExit()
+      else onRestart?.()
+    },
+    [onExit, onRestart],
+  )
+  const runConfirmedAction = useCallback(() => {
+    const action = confirmAction
+    setConfirmAction(null)
+    if (!action) return
+    if (action.type === 'exit') onExit()
+    else onRestart?.()
+  }, [confirmAction, onExit, onRestart])
+
   return (
     <div className="flex w-full select-none flex-col items-center gap-3 font-mono">
       {/* Top bar */}
@@ -1282,33 +1365,39 @@ export function CogitatorScanner({ difficulty, characterId, isGM, onExit, onRest
         <div className="flex items-center gap-1.5">
           <button
             type="button"
-            onClick={() => onRestart?.()}
+            onClick={() => guardAction({ type: 'restart' })}
             className="border border-phosphor-dim/60 px-2 py-1 text-[10px] uppercase leading-none tracking-widest text-phosphor-dim hover:border-phosphor hover:text-phosphor"
             title="Restart run"
           >
             ↺
           </button>
-          {(['acolyte', 'techpriest', 'magos'] as Difficulty[]).map((d) => {
-            const active = d === difficulty
-            return (
-              <button
-                type="button"
-                key={d}
-                onClick={() => onChangeDifficulty?.(d)}
-                className={[
-                  'border px-2 py-1 text-[10px] uppercase leading-none tracking-widest transition-colors',
-                  active ? 'border-phosphor bg-phosphor text-ink' : 'border-phosphor-dim/60 text-phosphor-dim hover:border-phosphor hover:text-phosphor',
-                ].join(' ')}
-              >
-                {COG_DIFF_LABELS[d]}
-              </button>
-            )
-          })}
         </div>
-        <button type="button" onClick={onExit} className="uppercase text-phosphor-dim hover:text-phosphor">
+        <button type="button" onClick={() => guardAction({ type: 'exit' })} className="uppercase text-phosphor-dim hover:text-phosphor">
           [esc]
         </button>
       </div>
+
+      {confirmAction && (
+        <div className="flex w-full max-w-[480px] items-center justify-between gap-2 border border-sanguine/70 bg-ink/80 px-3 py-2 text-[10px] uppercase tracking-widest text-sanguine">
+          <span>forfeit {Math.floor(pendingPoints)} unbanked pts?</span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={runConfirmedAction}
+              className="border border-sanguine px-2 py-1 leading-none hover:bg-sanguine hover:text-ink"
+            >
+              confirm
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmAction(null)}
+              className="border border-phosphor-dim/60 px-2 py-1 leading-none text-phosphor-dim hover:border-phosphor hover:text-phosphor"
+            >
+              cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Stage title */}
       <div className="-mt-1 flex w-full max-w-[480px] items-baseline justify-between px-1">
@@ -1323,7 +1412,6 @@ export function CogitatorScanner({ difficulty, characterId, isGM, onExit, onRest
           </span>
         </div>
       </div>
-
       {/* Scope — the circular clip lives on its own inner wrapper around just
           the canvas now, not the whole box, so the corner HUD readouts below
           (positioned against this square outer wrapper) land in the box's
@@ -1339,6 +1427,10 @@ export function CogitatorScanner({ difficulty, characterId, isGM, onExit, onRest
         >
           <canvas ref={canvasRef} onPointerDown={handleScopeTap} className="block cursor-crosshair touch-none" />
         </div>
+
+        {/* Checkpoint ring — wraps the outer rim of the scope itself instead
+            of a separate strip, so it reads as part of the same instrument. */}
+        <CircularCheckpointRing stage={stage} percentGreen={percentGreen} />
 
         {/* HUD — bracketed coordinate-readout boxes, same idiom as an
             in-universe star-map's CORD./AUTODECOUNT chips. */}
@@ -1369,6 +1461,20 @@ export function CogitatorScanner({ difficulty, characterId, isGM, onExit, onRest
           </div>
         )}
 
+        {checkpointCelebration && (
+          <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center">
+            <div className="animate-tier-unlock animate-checkpoint-glow animate-checkpoint-shine flex flex-col items-center gap-1 border border-brass bg-ink/85 px-5 py-3 text-center">
+              <span
+                className="font-display text-xl tracking-[0.2em] text-brass"
+                style={{ textShadow: '0 0 10px color-mix(in oklab, var(--color-brass) 85%, transparent)' }}
+              >
+                ++ CHECKPOINT SECURED ++
+              </span>
+              <span className="font-mono text-xs tracking-widest text-brass/90">{checkpointCelebration.amount} PTS BANKED</span>
+            </div>
+          </div>
+        )}
+
         {failed && (
           <div className="pointer-events-auto absolute inset-x-0 bottom-3 z-30 flex items-center justify-center">
             <button
@@ -1386,9 +1492,14 @@ export function CogitatorScanner({ difficulty, characterId, isGM, onExit, onRest
         )}
       </div>
 
+      <div className="-mt-1 w-full max-w-[480px] px-1 text-center font-mono text-[8px] uppercase tracking-widest text-phosphor-dim/60">
+        ◆ checkpoint — banks points on clear
+      </div>
+
       {/* Resource & upgrade HUD — placed outside the scope for legibility */}
       <UpgradeStrip
         data={data}
+        pendingPoints={pendingPoints}
         upgrades={upgrades}
         pendingUpgrade={pendingUpgrade}
         onOvercharge={buyOvercharge}
@@ -1406,10 +1517,138 @@ export function CogitatorScanner({ difficulty, characterId, isGM, onExit, onRest
   )
 }
 
+/* --------------------------- Checkpoint ring HUD --------------------------- */
+
+// Stage 1 sits at 12 o'clock; the next 10 stages wrap clockwise around the
+// scope's outer rim. Once the player pushes past that page of 11, the ring
+// re-pages to the next block (12-22, 23-33, ...) — same layout, just the
+// next 11 lattice numbers and whichever of them are checkpoints.
+const RING_PAGE_SIZE = 11
+// Ticks are spaced as if there were RING_PAGE_SIZE+1 of them around the
+// circle, but only RING_PAGE_SIZE are real — the extra slot is left empty
+// right before 12 o'clock. That gives the lead-in progress arc for the
+// page's first tick a dedicated, non-overlapping start point (see `segments`
+// below) instead of it landing exactly on the last tick's position, and
+// doubles as a visible seam marking the page boundary.
+const RING_SLOT_COUNT = RING_PAGE_SIZE + 1
+/** Marker + label sit just outside the scope's visible border (radius SIZE/2). */
+const RING_MARKER_R = SIZE / 2
+const RING_LABEL_R = RING_MARKER_R + 13
+/** Arc length of one tick-to-tick slot (all slots are equal angle) — used as
+ * the stroke-dasharray/dashoffset unit for the fill-progress trick below. */
+const RING_SEGMENT_ARC_LEN = RING_MARKER_R * ((Math.PI * 2) / RING_SLOT_COUNT)
+
+function CircularCheckpointRing({ stage, percentGreen }: { stage: number; percentGreen: number }) {
+  const pageStart = Math.floor((stage - 1) / RING_PAGE_SIZE) * RING_PAGE_SIZE + 1
+  const stages = Array.from({ length: RING_PAGE_SIZE }, (_, i) => pageStart + i)
+  const ringPoint = (i: number) => {
+    const angle = -Math.PI / 2 + (i / RING_SLOT_COUNT) * Math.PI * 2
+    return { x: CENTER + RING_MARKER_R * Math.cos(angle), y: CENTER + RING_MARKER_R * Math.sin(angle) }
+  }
+  const markerPoints = stages.map((_, i) => ringPoint(i))
+  // One "progress into this tick" segment per tick, including the page's
+  // very first one — that lead-in comes from a virtual point one gap
+  // counter-clockwise of 12 o'clock (there's no earlier real tick to start
+  // from), so the loading-bar fill still has somewhere to grow from on the
+  // stage you're actually on when it's the first tick of the page.
+  const segments = stages.map((s, i) => ({
+    from: i === 0 ? ringPoint(-1) : markerPoints[i - 1],
+    to: markerPoints[i],
+    targetStage: s,
+  }))
+
+  return (
+    <div className="pointer-events-none absolute inset-0 z-10">
+      {/* Rim track — one arc per tick, leading up to it. A dim base track
+          always shows the full gap; a brighter, thicker overlay fills over
+          it — fully once that tick is already cleared, and for the CURRENT
+          stage's tick, only as far as percentGreen (the live lattice-control
+          %), so it grows/shrinks like a loading bar as control shifts, via
+          the standard stroke-dasharray/dashoffset progress-ring trick
+          (offset counts down from the full arc length to 0 as the fraction
+          goes from 0 to 1). */}
+      <svg className="absolute inset-0" width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
+        {segments.map(({ from, to, targetStage }) => {
+          const d = `M ${from.x} ${from.y} A ${RING_MARKER_R} ${RING_MARKER_R} 0 0 1 ${to.x} ${to.y}`
+          const fraction = targetStage < stage ? 1 : targetStage === stage ? Math.max(0, Math.min(1, percentGreen / 100)) : 0
+          return (
+            <g key={targetStage}>
+              <path d={d} fill="none" strokeLinecap="round" className="stroke-phosphor-dim" strokeOpacity={0.3} strokeWidth={1.5} />
+              <path
+                d={d}
+                fill="none"
+                strokeLinecap="round"
+                className="stroke-phosphor"
+                strokeOpacity={0.85}
+                strokeWidth={4}
+                style={{
+                  strokeDasharray: RING_SEGMENT_ARC_LEN,
+                  strokeDashoffset: RING_SEGMENT_ARC_LEN * (1 - fraction),
+                  transition: 'stroke-dashoffset 300ms ease-out',
+                }}
+              />
+            </g>
+          )
+        })}
+      </svg>
+      {stages.map((s, i) => {
+        const { x, y } = markerPoints[i]
+        const angle = -Math.PI / 2 + (i / RING_SLOT_COUNT) * Math.PI * 2
+        const cos = Math.cos(angle)
+        const sin = Math.sin(angle)
+        const isCp = isCheckpointStage(s)
+        const state: 'cleared' | 'current' | 'upcoming' = s < stage ? 'cleared' : s === stage ? 'current' : 'upcoming'
+        return (
+          <div key={s}>
+            <div
+              title={
+                isCp
+                  ? `Lattice ${String(s).padStart(2, '0')} — checkpoint, banks all pending pts on clear`
+                  : `Lattice ${String(s).padStart(2, '0')}`
+              }
+              className={[
+                'pointer-events-auto absolute flex items-center justify-center border transition-all',
+                isCp ? 'h-3.5 w-3.5' : 'h-2.5 w-2.5 rounded-full',
+                isCp
+                  ? state === 'cleared'
+                    ? 'border-brass bg-brass'
+                    : state === 'current'
+                      ? 'animate-checkpoint-glow border-brass bg-brass/50'
+                      : 'border-brass/50'
+                  : state === 'cleared'
+                    ? 'border-phosphor bg-phosphor'
+                    : state === 'current'
+                      ? 'animate-pulse border-phosphor bg-phosphor/40'
+                      : 'border-phosphor-dim/40',
+              ].join(' ')}
+              style={{
+                left: x,
+                top: y,
+                transform: `translate(-50%, -50%)${isCp ? ' rotate(45deg)' : ''}`,
+              }}
+            />
+            <span
+              className={`absolute text-[8px] tabular-nums ${isCp ? 'text-brass' : 'text-phosphor-dim/70'}`}
+              style={{
+                left: CENTER + RING_LABEL_R * cos,
+                top: CENTER + RING_LABEL_R * sin,
+                transform: 'translate(-50%, -50%)',
+              }}
+            >
+              {String(s).padStart(2, '0')}
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 /* ----------------------------- Upgrade overlay HUD ----------------------------- */
 
 interface UpgradeStripProps {
   data: number
+  pendingPoints: number
   upgrades: UpgradeState
   pendingUpgrade: 'overcharge' | 'fortify' | 'counter' | 'repair' | null
   onOvercharge: () => void
@@ -1418,13 +1657,17 @@ interface UpgradeStripProps {
   onRepair: () => void
 }
 
-function UpgradeStrip({ data, upgrades, pendingUpgrade, onOvercharge, onFortify, onCounter, onRepair }: UpgradeStripProps) {
+function UpgradeStrip({ data, pendingPoints, upgrades, pendingUpgrade, onOvercharge, onFortify, onCounter, onRepair }: UpgradeStripProps) {
   void upgrades
   return (
     <div className="mt-3 flex w-full max-w-[480px] flex-wrap items-center justify-center gap-2 border border-phosphor-dim/50 bg-ink/70 px-3 py-2">
       <div className="mr-1 flex items-baseline gap-1.5 border-r border-phosphor-dim/40 pr-3">
         <span className="text-[10px] uppercase tracking-[0.25em] text-phosphor-dim">data</span>
         <span className="text-glow font-display text-base leading-none tabular-nums text-phosphor">{data}</span>
+      </div>
+      <div className="mr-1 flex items-baseline gap-1.5 border-r border-phosphor-dim/40 pr-3" title="Unbanked Cogitator points — lost if this run ends before the next checkpoint">
+        <span className="text-[10px] uppercase tracking-[0.25em] text-phosphor-dim">pts</span>
+        <span className="text-glow font-display text-base leading-none tabular-nums text-phosphor">{Math.floor(pendingPoints)}</span>
       </div>
       <UpgradeButton
         label="OVRC"

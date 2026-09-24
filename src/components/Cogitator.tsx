@@ -2,16 +2,14 @@ import { useQuery } from 'convex/react'
 import { useState } from 'react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
-import { CogitatorScanner, type Difficulty } from './CogitatorScanner'
+import { CogitatorScanner } from './CogitatorScanner'
 
 // Main-menu feature wrapper for the Cogitator Scanner minigame — same shape
 // as Autopsy.tsx/Bestiary.tsx. Shows the shared party points pool (also
 // visible from Codex.tsx while browsing Mainframe entries) and mounts the
-// game itself, keyed by difficulty+run so choosing a new difficulty or
-// restarting starts a completely fresh run.
+// game itself, keyed by runKey so restarting starts a completely fresh run.
 export function Cogitator({ characterId, isGM }: { characterId: Id<'characters'>; isGM: boolean }) {
   const balance = useQuery(api.cogitatorPoints.getBalance)
-  const [difficulty, setDifficulty] = useState<Difficulty>('acolyte')
   const [runKey, setRunKey] = useState(0)
 
   return (
@@ -34,22 +32,13 @@ export function Cogitator({ characterId, isGM }: { characterId: Id<'characters'>
 
       <CogitatorScanner
         key={runKey}
-        difficulty={difficulty}
         characterId={characterId}
         isGM={isGM}
-        // [esc] resets all the way back to this feature's default starting
-        // state (Lvl-I, stage 1) — the ↺ button next to it just retries the
-        // current difficulty. Leaving the feature entirely is the global
-        // "‹ Main Menu" header button every feature already relies on.
-        onExit={() => {
-          setDifficulty('acolyte')
-          setRunKey((k) => k + 1)
-        }}
+        // [esc] resets all the way back to stage 1 — the ↺ button next to it
+        // does the same thing (restart). Leaving the feature entirely is the
+        // global "‹ Main Menu" header button every feature already relies on.
+        onExit={() => setRunKey((k) => k + 1)}
         onRestart={() => setRunKey((k) => k + 1)}
-        onChangeDifficulty={(d) => {
-          setDifficulty(d)
-          setRunKey((k) => k + 1)
-        }}
       />
     </div>
   )

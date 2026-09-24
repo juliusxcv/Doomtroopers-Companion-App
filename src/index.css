@@ -224,6 +224,43 @@ body::before {
   pointer-events: none;
 }
 
+/* Cogitator Scanner — checkpoint-bank celebration. Same beat as the
+   tier-unlock above (animate-tier-unlock still does the scale-in), just
+   recolored to brass and pulsed harder so banking pendingPoints at a
+   checkpoint reads as a bigger deal than an ordinary stage clear. */
+@keyframes checkpoint-glow-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 10px color-mix(in oklab, var(--color-brass) 55%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 28px color-mix(in oklab, var(--color-brass) 90%, transparent),
+      0 0 56px color-mix(in oklab, var(--color-brass) 45%, transparent);
+  }
+}
+.animate-checkpoint-glow {
+  animation: checkpoint-glow-pulse 1s ease-in-out infinite;
+}
+.animate-checkpoint-shine {
+  position: relative;
+  overflow: hidden;
+}
+.animate-checkpoint-shine::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 35%;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    color-mix(in oklab, var(--color-brass) 80%, transparent) 50%,
+    transparent 100%
+  );
+  animation: tier-shine-sweep 1.4s cubic-bezier(0.6, 0.04, 0.4, 0.96) infinite;
+  pointer-events: none;
+}
+
 /* ============================================================
    Peril Check — Vexilia's warp-dice roller. A deliberately different
    accent (violet "warp" rather than the terminal's phosphor green) scoped
