@@ -355,6 +355,10 @@ export function CogitatorScanner({ characterId, isGM, onExit, onRestart }: Props
   // lost entirely if the run ends (exit/restart/failure) before the next
   // checkpoint stage clears.
   const [pendingPoints, setPendingPoints] = useState(0)
+  // Running total actually banked to the party pool so far this run (across
+  // however many checkpoints have cleared) — shown under PTS once non-zero,
+  // separate from pendingPoints which tracks what's still at risk.
+  const [bankedPoints, setBankedPoints] = useState(0)
   // Gates [esc]/restart behind a confirm step whenever doing so would
   // forfeit unbanked pendingPoints.
   const [confirmAction, setConfirmAction] = useState<{ type: 'exit' } | { type: 'restart' } | null>(null)
@@ -402,11 +406,13 @@ export function CogitatorScanner({ characterId, isGM, onExit, onRestart }: Props
     upgrades: UpgradeState
     repairCooldownMs: number
     pendingPoints: number
+    bankedPoints: number
   }>({
     data: 0,
     upgrades: { counterEmit: false },
     repairCooldownMs: 0,
     pendingPoints: 0,
+    bankedPoints: 0,
   })
 
   // Game world state (re-built on stage change)
@@ -459,11 +465,13 @@ export function CogitatorScanner({ characterId, isGM, onExit, onRestart }: Props
           upgrades: { counterEmit: false },
           repairCooldownMs: 0,
           pendingPoints: 0,
+          bankedPoints: 0,
         }
         setData(0)
         setUpgrades({ counterEmit: false })
         setRepairCooldown(0)
         setPendingPoints(0)
+        setBankedPoints(0)
       }
       worldRef.current = {
         nodes: built.nodes,
@@ -972,6 +980,7 @@ export function CogitatorScanner({ characterId, isGM, onExit, onRestart }: Props
           if (isCheckpointStage(w.stage) && runRef.current.pendingPoints > 0) {
             const amount = runRef.current.pendingPoints
             runRef.current.pendingPoints = 0
+            runRef.current.bankedPoints += amount
             banked = true
             if (!bridge.isGM) {
               void bridge.award({ characterId: bridge.characterId, amount, reason: `cogitator-checkpoint-${w.stage}` })
@@ -980,6 +989,7 @@ export function CogitatorScanner({ characterId, isGM, onExit, onRestart }: Props
             checkpointBurstRef.current.push({ t0: burstNow }, { t0: burstNow + 150 }, { t0: burstNow + 300 })
             setCheckpointCelebration({ amount })
             window.setTimeout(() => setCheckpointCelebration(null), 2000)
+            setBankedPoints(runRef.current.bankedPoints)
           }
           setPendingPoints(runRef.current.pendingPoints)
           window.setTimeout(
@@ -1510,6 +1520,7 @@ export function CogitatorScanner({ characterId, isGM, onExit, onRestart }: Props
       <UpgradeStrip
         data={data}
         pendingPoints={pendingPoints}
+        bankedPoints={bankedPoints}
         upgrades={upgrades}
         pendingUpgrade={pendingUpgrade}
         onOvercharge={buyOvercharge}
@@ -1682,6 +1693,7 @@ function CircularCheckpointRing({ stage, percentGreen }: { stage: number; percen
 interface UpgradeStripProps {
   data: number
   pendingPoints: number
+  bankedPoints: number
   upgrades: UpgradeState
   pendingUpgrade: 'overcharge' | 'fortify' | 'counter' | 'repair' | null
   onOvercharge: () => void
@@ -1690,7 +1702,7 @@ interface UpgradeStripProps {
   onRepair: () => void
 }
 
-function UpgradeStrip({ data, pendingPoints, upgrades, pendingUpgrade, onOvercharge, onFortify, onCounter, onRepair }: UpgradeStripProps) {
+function UpgradeStrip({ data, pendingPoints, bankedPoints, upgrades, pendingUpgrade, onOvercharge, onFortify, onCounter, onRepair }: UpgradeStripProps) {
   void upgrades
   return (
     <div className="mt-3 flex w-full max-w-[480px] flex-wrap items-center justify-center gap-2 border border-phosphor-dim/50 bg-ink/70 px-3 py-2">
@@ -1698,9 +1710,21 @@ function UpgradeStrip({ data, pendingPoints, upgrades, pendingUpgrade, onOvercha
         <span className="text-[10px] uppercase tracking-[0.25em] text-phosphor-dim">data</span>
         <span className="text-glow font-display text-base leading-none tabular-nums text-phosphor">{data}</span>
       </div>
-      <div className="mr-1 flex items-baseline gap-1.5 border-r border-phosphor-dim/40 pr-3" title="Unbanked Cogitator points — lost if this run ends before the next checkpoint">
-        <span className="text-[10px] uppercase tracking-[0.25em] text-phosphor-dim">pts</span>
-        <span className="text-glow font-display text-base leading-none tabular-nums text-phosphor">{Math.floor(pendingPoints)}</span>
+      <div className="mr-1 flex flex-col justify-center gap-1 border-r border-phosphor-dim/40 pr-3">
+        <div className="flex items-baseline gap-1.5" title="Unbanked Cogitator points — lost if this run ends before the next checkpoint">
+          <span className="text-[10px] uppercase tracking-[0.25em] text-phosphor-dim">pts</span>
+          <span className="text-glow font-display text-base leading-none tabular-nums text-phosphor">{Math.floor(pendingPoints)}</span>
+        </div>
+        {bankedPoints > 0 && (
+          <div className="flex items-baseline gap-1.5" title="Cogitator points already banked to the party pool this run">
+            <span className="font-mono text-[7px] leading-tight font-bold uppercase tracking-[0.15em] text-brass">
+              bnkd
+              <br />
+              pts
+            </span>
+            <span className="text-glow font-display text-base leading-none tabular-nums text-brass">{Math.floor(bankedPoints)}</span>
+          </div>
+        )}
       </div>
       <UpgradeButton
         label="OVRC"
