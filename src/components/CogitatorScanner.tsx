@@ -555,8 +555,13 @@ export function CogitatorScanner({ characterId, isGM, onExit, onRestart }: Props
     const dpr = window.devicePixelRatio || 1
     canvas.width = SIZE * dpr
     canvas.height = SIZE * dpr
-    canvas.style.width = `${SIZE}px`
-    canvas.style.height = `${SIZE}px`
+    // Internal drawing buffer stays a fixed SIZE×SIZE (all drawing math below
+    // assumes that coordinate space) — only the CSS display size is
+    // responsive, so the whole scope shrinks to fit narrow mobile viewports
+    // instead of overflowing them. handleScopeTap already accounts for this
+    // by converting taps through the canvas's actual rendered rect.
+    canvas.style.width = '100%'
+    canvas.style.height = '100%'
     ctx.scale(dpr, dpr)
 
     // -------- Pre-rendered static background (disc gradient + grid rings) --------
@@ -1415,8 +1420,13 @@ export function CogitatorScanner({ characterId, isGM, onExit, onRestart }: Props
       {/* Scope — the circular clip lives on its own inner wrapper around just
           the canvas now, not the whole box, so the corner HUD readouts below
           (positioned against this square outer wrapper) land in the box's
-          actual corners instead of the circle cutting them off. */}
-      <div className="hud-corners relative" style={{ width: SIZE, height: SIZE }}>
+          actual corners instead of the circle cutting them off. Sized as
+          "up to SIZE, but never wider than the viewport" rather than a fixed
+          SIZE, so the scope (and everything pinned to its edges — HUD
+          corners, checkpoint ring) shrinks to fit narrow mobile widths
+          instead of overflowing them; the canvas and ring below are drawn in
+          a fixed SIZE×SIZE coordinate space and scale down with the box. */}
+      <div className="hud-corners relative w-full" style={{ maxWidth: SIZE, aspectRatio: '1' }}>
         <div
           className="absolute inset-0"
           style={{
@@ -1519,6 +1529,11 @@ export function CogitatorScanner({ characterId, isGM, onExit, onRestart }: Props
 
 /* --------------------------- Checkpoint ring HUD --------------------------- */
 
+// Converts a coordinate in the fixed 0..SIZE drawing space into a percentage
+// of the (now width-responsive) scope box, for plain HTML elements — unlike
+// the SVG ring track below, they don't get viewBox scaling for free.
+const pct = (v: number) => `${(v / SIZE) * 100}%`
+
 // A "Lattice 00" start marker sits at 12 o'clock — not a real stage, just
 // the ring's origin point — and the page's 11 real stages wrap clockwise
 // from there. Once the player pushes past that page of 11, the ring re-pages
@@ -1566,7 +1581,7 @@ function CircularCheckpointRing({ stage, percentGreen }: { stage: number; percen
           the standard stroke-dasharray/dashoffset progress-ring trick
           (offset counts down from the full arc length to 0 as the fraction
           goes from 0 to 1). */}
-      <svg className="absolute inset-0" width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
+      <svg className="absolute inset-0" width="100%" height="100%" viewBox={`0 0 ${SIZE} ${SIZE}`}>
         {segments.map(({ from, to, targetStage }) => {
           const d = `M ${from.x} ${from.y} A ${RING_MARKER_R} ${RING_MARKER_R} 0 0 1 ${to.x} ${to.y}`
           const fraction = targetStage < stage ? 1 : targetStage === stage ? Math.max(0, Math.min(1, percentGreen / 100)) : 0
@@ -1590,17 +1605,20 @@ function CircularCheckpointRing({ stage, percentGreen }: { stage: number; percen
           )
         })}
       </svg>
-      {/* Lattice 00 — the ring's fixed origin marker, not a real stage. */}
+      {/* Lattice 00 — the ring's fixed origin marker, not a real stage. Left
+          /top below are percentages of the box's own (now-responsive) size,
+          not raw SIZE-space pixels — plain HTML positioning doesn't get the
+          SVG's automatic viewBox scaling, so it has to be done by hand. */}
       <div
         title="Lattice 00 — start"
         className="absolute h-2 w-2 rounded-full border border-phosphor-dim/40"
-        style={{ left: startPoint.x, top: startPoint.y, transform: 'translate(-50%, -50%)' }}
+        style={{ left: pct(startPoint.x), top: pct(startPoint.y), transform: 'translate(-50%, -50%)' }}
       />
       <span
         className="absolute text-[8px] tabular-nums text-phosphor-dim/50"
         style={{
-          left: CENTER + RING_LABEL_R * Math.cos(-Math.PI / 2),
-          top: CENTER + RING_LABEL_R * Math.sin(-Math.PI / 2),
+          left: pct(CENTER + RING_LABEL_R * Math.cos(-Math.PI / 2)),
+          top: pct(CENTER + RING_LABEL_R * Math.sin(-Math.PI / 2)),
           transform: 'translate(-50%, -50%)',
         }}
       >
@@ -1637,16 +1655,16 @@ function CircularCheckpointRing({ stage, percentGreen }: { stage: number; percen
                       : 'border-phosphor-dim/40',
               ].join(' ')}
               style={{
-                left: x,
-                top: y,
+                left: pct(x),
+                top: pct(y),
                 transform: `translate(-50%, -50%)${isCp ? ' rotate(45deg)' : ''}`,
               }}
             />
             <span
               className={`absolute text-[8px] tabular-nums ${isCp ? 'text-brass' : 'text-phosphor-dim/70'}`}
               style={{
-                left: CENTER + RING_LABEL_R * cos,
-                top: CENTER + RING_LABEL_R * sin,
+                left: pct(CENTER + RING_LABEL_R * cos),
+                top: pct(CENTER + RING_LABEL_R * sin),
                 transform: 'translate(-50%, -50%)',
               }}
             >
